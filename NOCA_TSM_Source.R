@@ -14,12 +14,13 @@
 #            1) Renaming a few columns to make the code simpler
 #            2) Making sure the date column has the correct type.
 #            3) Fix some broken dates.
+#            4) Create a list of capture dates and intervals. 
 #
 #   3) Trim the data down to just the records we want. 
 #      This involves limiting the data by species, station and record. 
 #      
-#   4) Next we need to clean up the data this involves fixing some 
-#      details regarding age, sex, fat, etc ...
+#   4) Next we need to clean up the data at a species level. 
+#      This involves fixing some details regarding age, sex, fat, etc ...
 #      This step also includes rebinning some of the data into
 #      new classes that are more meaningful for this analysis. 
 #      These steps include:
@@ -136,6 +137,7 @@ Version = 'SMD'
 
         ############################################################
         # Step 2.2.1: Create a Date column and give it the correct type. 
+        #
         ############################################################
             birbs$Date = paste(birbs$Year, birbs$Month, birbs$Day, sep = "-")
             birbs$Date = as.Date(birbs$Date, "%Y-%m-%d")
@@ -151,6 +153,7 @@ Version = 'SMD'
         #             The other pair is February 27 and 28, 2014. 
         #             I suspect that some of this is misrecorded data. But maybe not.
         #             At any rate, for simplicity, we'll merge each pair into a single date.
+        #
         ############################################################
 
             # This pair is a Monday and a Tuesday. 
@@ -182,6 +185,7 @@ Version = 'SMD'
         # Step 2.2.3: Fix any date errors in the database. 
         #             This section finds captures that got double recorded in the LABO database
         #             and removes them. These are not same-day recaptures, they are errors in the LABO database. 
+        #
         ############################################################
    
             # Step 1: Create an auxiliar data.frame that has one row for each band number and the list of capture dates
@@ -252,6 +256,7 @@ Version = 'SMD'
         # Step 2.2.4: Add the season definitions. 
         #             The breeding season will be defined as dates between 
         #             April 1st and August 7th, inclusive. 
+        #
         ############################################################
             index               = (4 <= birbs$Month) & ( birbs$Month < 8 | ( birbs$Month == 8 & birbs <= 7 ) )
             birbs$Season        = 'Nonbreeding'
@@ -270,6 +275,34 @@ Version = 'SMD'
             cat('NOCA_TSM_Source.R: Msg: Removing same day recaps\n')
             birbs <- birbs[which(birbs$Code != "S"),]
 
+        
+    ################################################################################
+    # Step 2.3: Create capture date dataframe
+    #
+    #           At this point we need to also get a full list of capture dates 
+    #           from the "raw" banding database. Technically, we cannot use the 
+    #           NOCA portion of the database to do this because if we captured no 
+    #           NOCA's on a date, then that capture occation will not appear in the 
+    #           NOCA database. This omission could mess with the estimates of p, 
+    #           the capture probability. However, there are two points to raise 
+    #           here. First, if we captured no birds at all on a banding date, then
+    #           trying to extract the capture occations from the banding database 
+    #           is the wrong approach and we should use another part of the banding 
+    #           log to get this. Second, I think we could use just the NOCA capture
+    #           dates for analyzing the NOCAs. If there was a banding date when we 
+    #           didn't capture NOCAs, this would just be included as a single p 
+    #           probability for that date with no associated phi. But this value 
+    #           could just be folded into the next p probability. Since Mark will 
+    #           know the length of time between capture dates and will raise p to 
+    #           the appropriate value, I'm not sure this is important. 
+    ################################################################################
+    temp      = subset( birbs, Station %in% c('HOME','BAMB') & Date > as.Date('2010-03-30') ) 
+    capDateDF = tibble( Date = temp$Date %>% unique() %>% sort(), delta = c(0, Date[2:length(date)] - Date[2:length(date)-1] ) )
+
+    # Mesure the intervals in months. 
+    capDateDF$delta = capDateDF$delta/30
+
+
 ################################################################################
 ################################################################################
 ## Step 3: Strip the data down to just the species, station and dates 
@@ -279,20 +312,6 @@ Version = 'SMD'
 ################################################################################
 
     working = subset( birbs, SpeciesCode == 'NOCA' & Station %in% c('HOME','BAMB') & Date > as.Date('2010-03-30') ) 
-
-    # At this point we need to also get a full list of capture dates from the "raw" banding database. 
-    # Technically, we cannot use the NOCA portion of the database to do this because if we 
-    # captured no NOCA's on a date, then that capture occation will not appear in the  NOCA database.
-    # This omission could mess with the estimates of p, the capture probability. However, there 
-    # are two points to raise here. First, if we captured no birds at all on a banding date, then
-    # trying to extract the capture occations from the banding database is the wrong approach and we should
-    # use another part of the banding log to get this. Second, I think we could use just the NOCA capture
-    # dates for analyzing the NOCAs. If there was a banding date when we didn't capture NOCAs, this would
-    # just be included as a single p probability for that date with no associated phi. But this value could just be
-    # folded into the next p probability. Since Mark will know the length of time between capture dates
-    # and will raise p to the appropriate value, I'm not sure this is important. 
-    temp      = subset( birbs, Station %in% c('HOME','BAMB') & Date > as.Date('2010-03-30') ) 
-    capDateDF = tibble( Date = temp$Date %>% unique() %>% sort(), delta = c(0, Date[2:length(date)] - Date[2:length(date)-1] ) )
 
     # Deal with sex in one place. See below.
     ###########################################################
@@ -798,9 +817,11 @@ Version = 'SMD'
 
             fatU     = subset(working, Fat == 'Unknown')
             bandList = unique(fatU$BandNumber)
-            cat('NOCA_TSM_Source.R: Msg: Checking birds/records without fat data\n')
+            cat('NOCA_TSM_Source.R: Msg: Checking and removing birds/records without fat data\n')
             cat('NOCA_TSM_Source.R: Msg: There are ',nrow(fatU),' birds with at least one fat value of \"U\"\n')
             cat('NOCA_TSM_Source.R: Msg: There are ',length(bandList),' records with a fat value of \"U\"\n')
+
+            working = subset(working, Fat == 'Unknown')
 
         } else {
             # Reclassify empty fat entries as U
@@ -834,6 +855,18 @@ Version = 'SMD'
             NOCA$Fat[NOCA$Fat=="F"] = "H"
             NOCA$Fat[NOCA$Fat=="T"] = "L"
             NOCA$Fat[NOCA$Fat=="N"] = "L"
+
+
+    ################################################################################
+    # Step 4.5: Prep the mean wing length data
+    #
+    ################################################################################
+    wingDF      = aggregate(RightWing ~ BandNumber, working, paste, collapse = ',')
+    wingDF$mean = apply(wingDF, 1, function(row) {row['RightWing'] %>% strsplit(split=',') %>% unlist() %>% as.numeric() %>% mean(na.rm=T) } )
+    noWingDF    = subset( wingDF, is.na(wingDF$mean) | wingDF$mean == 0 )
+    cat('NOCA_TSM_Source.R: Msg: Checking and removing birds with no wing data\n')
+    cat('NOCA_TSM_Source.R: Msg: There are ',nrow(noWingDF),' birds with no wing data\n')
+    working = subset(working, !( BandNumber%in%noWingDF$BandNumber) )
 
 ################################################################################
 # Left over code that doesn't really do anything anymore. 
@@ -943,7 +976,7 @@ Version = 'SMD'
 ################################################################################
 ################################################################################
 ###### This is next big section of the code. In this section, we are 
-###### compiling the banding data down into a form that can be used directly 
+###### compiling the banding data into a form that can be used directly 
 ###### by Mark. In particular, we are creating one record per bird.
 ######
 ######
@@ -951,238 +984,375 @@ Version = 'SMD'
 ################################################################################
 ################################################################################
 
-    if ( T ) {
-        forMark = tibble( BandNumber = unique(working$BandNumber),
-                            ch       = ,
-                            Age      = ,
-                            InitAge  =  ,
-                            Sex      = ,
-                            Fat      =  ,
-                            Malaria  =  ,
-                            MeanWing = 
-                             )
+    ################################################################################
+    # Step 5: Reformat the data for Mark
+    #
+    ################################################################################
+    if ( Version == 'SMD' ) {
+        # Step 1: Create the dataframe that will hold the mark formatted data. 
+        # As a first step, just add the band numbers. After the band numbers are
+        # added, we need to add the following columns:
+        # Sex
+        # MeanWing
+        # Malaria
+        # freq ?
+        # IntAge = initial age
+        # season 
+        # ch = capture history
+        #
+        markData = tibble( id         = NOCA$BandNumber %>% unique() %>% sort() )
+
+        # Step 2: Add Sex
+        #         At this point, the working dataframe should be fixed 
+        #         so that each bird has only a single sex. 
+            sexDF        = aggregate(Sex~BandNumber, working, function(sex) { sex %>% unlist() %>% sort() %>% unique() %>% paste(collapse=',')} )
+            sexDF$numSex = apply(sexDF, 1, function(row) { row[2] %>% strsplit(split=',') %>% unlist() %>% length() })
+            if ( sum(sexDF$numSex > 1) ) {
+                stop('NOCA_TSM_Source.R: Error: One or more birds have multiple sex determinations\n')
+            }
+            markData = merge(markData, sexSF, by = BandNumber )
+            remove('sexDF')
+
+        # Step 3: Add MeanWing
+            wingDF       = aggregate(RightWing~BandNumber, working, mean, na.rm=T)
+            markData     = merge(markData, wingDF, by = BandNumber) %>% rename(MeanWing = RightWing)
+            remove('wingDF')
+
+        # Step 4: Add Malaria
+            malariaDF    = aggregate(Malaria~BandNumber, working, function(mal) {mal %>% unlist() %>% unique() %>% paste(collapse=',')} )
+            markData     = merge(markData, malariaDF, by = BandNumber)
+            remove('malariaDF')
         
+        # Step 5: Add freq/CJS
+        #         In Eric's code below CJS appears to be just a column of 1's.
+        #         Moreover, CJS/freq does not appear to be used. So, I'm going
+        #         to skip it for now.
+            
+        # Step 6: Add IntAge
+            ageDF    = aggregate(Age~BandNumber, working, function( age ) { (age %>% unlist())[1]   } )
+            markData = merge(markData, ageDF, by = BandNumber )
+            remove('ageDF')
+
+        # Step 7: Add season
+        #         I'm not sure how this one is supposed to work.
+        #         I'll have to ask Eric.
+
+        # Step 8: Add capture history
+        markData$ch = ''
+        dateDF = aggregate(Date ~ BandNumber, working, paste, collapse=',')
+        for ( bandNum in dataDF$BandNumber ) {
+            dateList = dateDF$Date %>% strsplit(split=',') %>% unlist() %>% as.Date()
+            ch       = c(0,1)[ c(capDateDF$Date %in% dateList + 1) ] %>% paste(collapse='')
+            markData$ch[markData$BandNumber == bandNum] = ch
+        }
+
     } else {
-    ################################################################################
-    # Step 5: Create Summary Variables
-    #
-    ################################################################################
-        cat('MSM_Tobin_Original.R: Msg: Creating summary variables')
-        NOCABands <- unique(NOCA$BandNumber)
+        # SMD: Several things are happening in this section of Eric's code. In order, the 
+        # SMD: events are:
+        # SMD:      1) Get list of unique band numbers and put it in NOCABands. 
+        # SMD:      2) Add a column called CJS to NOCA dataframe. 
+        # SMD:      3) Add mean wing length to the NOCA dataframe. 
+        # SMD:      4) Remove birds that do not have mean wing lengths from NOCA dataframe.
+        # SMD:      5) Make several columns in the birbs dataframe factors. 
+        # SMD:      6) Create a dataframe to hold the data that will be given to Mark.
+        # SMD:         The dataframe, called Marky, has band numbers and a place to hold
+        # SMD:         hold capture histories.
+        # SMD:      7) Remove birds with no fat data from NOCA dataframe. 
+        # SMD:      8) Make an auxiliary dataframe used to create capture histories.
+        # SMD:         This dataframe gets called NOCAfat, which is non-intuitive and confusing. 
+        # SMD:      9) Create an auxiliar dataframe, called NOCACaps, that lists capture dates 
+        # SMD:         for each band number. 
+        # SMD:     10) Merge Marky and the auxiliar dataframe
+        # SMD:     11) Actually create the capture history
+        # SMD: 
+        # SMD: 
 
-        MeanTable <- aggregate(RightWing~BandNumber, NOCA, mean, na.rm=T)
+            ################################################################################
+            # Step 5: Create Summary Variables
+            #
+            ################################################################################
+            cat('MSM_Tobin_Original.R: Msg: Creating summary variables')
 
-        NOCA$CJS  <- 1
+            # Get the NOCA band numbers
+            NOCABands <- unique(NOCA$BandNumber)
 
-        NOCA$MeanWing <- 0
+            # Add a column to NOCA dataframe
+            NOCA$CJS  <- 1
 
-        for ( band in MeanTable$BandNumber ) {
-          NOCA$MeanWing[ NOCA$BandNumber == band ] = MeanTable$RightWing[ MeanTable$BandNumber == band]
-        }
+            # Step 1: Add mean wing length to the NOCA data frame.  
+            #         Create an auxiliary dataframe that contains the mean for each bird/band number
+                MeanTable <- aggregate(RightWing~BandNumber, NOCA, mean, na.rm=T)
 
-        beforeWingRemoval <- length(unique(NOCA$BandNumber))
-        NOCA <- subset(NOCA, !is.na(NOCA$MeanWing))
-        afterWingRemoval <- beforeWingRemoval - length(unique(NOCA$BandNumber))
-        nowingNOCA <- NOCA[which(NOCA$MeanWing == 0),]
-        NOCA <- NOCA[which(NOCA$MeanWing != 0),]
-        RemovedNoWing <-length(unique(NOCA$BandNumber)) - (length(unique(NOCA$BandNumber)) - length(unique(nowingNOCA$BandNumber))) + afterWingRemoval
+                # Add a column to NOCA dataframe
+                NOCA$MeanWing <- 0
+
+                # Push the mean wing length from the auxiliary dataframe into the NOCA dataframe
+                for ( band in MeanTable$BandNumber ) {
+                  NOCA$MeanWing[ NOCA$BandNumber == band ] = MeanTable$RightWing[ MeanTable$BandNumber == band]
+                }
+
+            # Step 2: Remove any birds that have a mean wing length of NA or 0.
+            #         Report the number of birds removed. 
+                beforeWingRemoval <- length(unique(NOCA$BandNumber))
+                NOCA <- subset(NOCA, !is.na(NOCA$MeanWing))
+                afterWingRemoval <- beforeWingRemoval - length(unique(NOCA$BandNumber))
+                nowingNOCA <- NOCA[which(NOCA$MeanWing == 0),]
+                NOCA <- NOCA[which(NOCA$MeanWing != 0),]
+                RemovedNoWing <-length(unique(NOCA$BandNumber)) - (length(unique(NOCA$BandNumber)) - length(unique(nowingNOCA$BandNumber))) + afterWingRemoval
 
 
-        if (length(unique(nowingNOCA$BandNumber)) != RemovedNoWing){
-        cat('MSM_Tobin_Original.R: Msg: Removed birds without winglength. This removes', RemovedNoWing ,'NOCA observations from the population, but there are',length(unique(nowingNOCA$BandNumber)) ,'NOCA individuals. This means some are captured more than once without a winglength. Investigate.\n')
-        browser()
-        }else {
-          cat('MSM_Tobin_Original.R: Msg: Removed birds without winglength captured only once. This removes',length(unique(nowingNOCA$BandNumber)) ,'NOCA individuals.\n')
-        }
+                if (length(unique(nowingNOCA$BandNumber)) != RemovedNoWing){
+                    cat('MSM_Tobin_Original.R: Msg: Removed birds without winglength. This removes', RemovedNoWing ,'NOCA observations from the population, but there are',length(unique(nowingNOCA$BandNumber)) ,'NOCA individuals. This means some are captured more than once without a winglength. Investigate.\n')
+                    browser()
+                }else {
+                    cat('MSM_Tobin_Original.R: Msg: Removed birds without winglength captured only once. This removes',length(unique(nowingNOCA$BandNumber)) ,'NOCA individuals.\n')
+                }
+
+
+            ################################################################################
+            # Make columns that should be treated as factors into actual factors.
+            # They have been stored as strings up until this point.
+            # 
+            ################################################################################
+            birbs$Malaria = as.factor(birbs$Malaria)
+            birbs$Station = as.factor(birbs$Station)
+            birbs$Sex     = as.factor(birbs$Sex)
+            birbs$Net     = as.factor(birbs$Net)
+
+
+
+            ################################################################################
+            # Step 6: Create MARK sheet with MSM History
+            #
+            ################################################################################
+            Marky <- as.data.frame(unique(NOCA$BandNumber))
+            setnames(Marky, "unique(NOCA$BandNumber)", "BandNumber")
+            #Using BandNumber for merge function below. This prevents mishaps from ordering
+            ##order doesn't matter, it'll match by function. 
+
+            #Create column to hold capture histories
+            Marky$CH <- 0
+
+                # SMD:
+                # SMD: I've moved this code up so that all the Fat changes are dealt
+                # SMD: with in one place. 
+                # SMD:
+                if ( Version == 'EJT' ) {
+                    ################################################################################
+                    # Here you make your MSM variable in question
+                    #
+                    ################################################################################
+                    # FAT
+                    # we have turned missing into U above
+                    beforeFatRem  <- length(unique(NOCA$BandNumber))
+                    NOCA <- NOCA[which(NOCA$Fat != 'U'),]
+                    afterFatRem  <- length(unique(NOCA$BandNumber))
+                    diffy = beforeFatRem - afterFatRem
+
+                    cat('MSM_Tobin_Original.R: Msg: Removed birds without fat captured only once. This removes',diffy ,'NOCA individuals.\n')
+
+                }
+
+            # SMD: I'm not sure what this code is supposed to do. It claims to be about
+            # SMD: fat, but the current active code doesn't deal with fat at all. 
+            # SMD:
+            # SMD: The NOCAfat dataframe will have the following columns: BandNumber, Date and CJS
+            # SMD: I think CJS is just a column of 1's. 
+            # SMD:
+                # NOCAfat = aggregate(NOCA$Fat~NOCA$BandNumber + NOCA$Date, NOCA, paste, collapse=',')
+                # create DF with unique fat for each bird on each day of its individual capture
+                # Is and should be same length as NOCA
+                NOCAfat = aggregate(NOCA$CJS~NOCA$BandNumber + NOCA$Date, NOCA, paste, collapse=',')
+
+                #Change the names to make life easier. 
+                setnames(NOCAfat, 'NOCA$BandNumber', 'BandNumber')
+                setnames(NOCAfat, 'NOCA$Date',       'Date')
+                setnames(NOCAfat, 'NOCA$CJS',        'Fat')
+
+
+            # SMD: Create an auxiliary dataframe that lists the capture dates for each band number
+                # This will be how we create the different MSMs. Let's try with CJS, make sure it works
+                NOCAcaps <- aggregate(Date~BandNumber, NOCA, paste, collapse=",")
+                #names(NOCAcaps) = c('BandNumber', 'DateList')
+
+            # SMD: merge the NOCAcaps auxiliary dataframe with the Marky dataframe. 
+            # SMD: After this Marky should have the following columns: BandNumber, CH, Date
+            # SMD: where:
+            # SMD: BandNumber are band numbers
+            # SMD: CH is the blank capture history
+            # SMD: Date is the list of capture dates for each bird. 
+            # SMD:
+                # Go through by hand and make sure they are correct
+                # get a random sample, check them puppies
+                # creates a df with BandNumber, blank CH, and the DateList. This marries dates of capture with band# and CH
+                # You get the datelist from NOCAcaps applied to Marky. Guess we could've just done one dataframe here? Don't see why we need two...
+                Marky = merge( Marky, NOCAcaps, by=c('BandNumber') )
+
+            # SMD: Unused code:
+                #Below we create the capture histories from the date lists
+                #using full date index, you make string at that length of zeros subbing in your 
+                ##variables you toook out in the above subsection
+                    if ( F ) {
+                        for ( r in 1:nrow(Marky) ) {
+                            thisBird = subset(NOCAfat, BandNumber == Marky$BandNumber[r])
+                            #creates dataframe with BN, each dates, and fat reading
+                            ##new one made for each bird
+                            temp = merge(datelist, thisBird, by.x='Date', by.y='Date', all.x=TRUE)
+                            #create holding frame that is datelist, but added band number and fat
+                            temp$Fat[is.na(temp$Fat)] = '0'
+                            #this will sub in zeros for fat on days you didn't capture. 
+                            ##why it's important to convert na to something before, otherwise a false negative capture
+                            Marky$CH[r] = paste( temp$Fat, collapse='')
+                            #this collapses the fat column into a ch. Puts back into marky by index position
+                        }
+                    }
+
+            # SMD: This creates the capture history for each bird.
+            # SMD: What I don't like about this code is the dataframe
+            # SMD: NCOAfat isn't really being used to deal with fat.
+            # SMD: Instead the name is just being reused in a confusing 
+            # SMD: and non-intuitive manner. 
+            # SMD: 
+                # This is for using CJS models and Pradels
+                    if ( T ){ 
+                        # SMD: Cycle over the birds. 
+                        for ( r in 1:nrow(Marky) ) {
+
+                            # SMD: Get just the current bird
+                                # Creates dataframe with BN, each dates, and fat reading
+                                # new one made for each bird
+                                thisBird = subset(NOCAfat, BandNumber == Marky$BandNumber[r])
+
+                            # SMD: Merge the full list of capture dates 
+                            # SMD: and the data for the current bird
+                                # Create holding frame that is datelist, but added band number and fat
+                                temp = merge(datelist, thisBird, by.x='Date', by.y='Date', all.x=TRUE)
+
+                            # This will sub in zeros for fat on days you didn't capture. 
+                                temp$Fat[is.na(temp$Fat)] = '0'
+
+                            # This collapses the fat column into a ch. Puts back into marky by index position
+                                Marky$CH[r] = paste( temp$Fat, collapse='')
+                        }
+                    }
     }
 
+# SMD: This section of Eric's code produces a dataframe that
+# SMD: merges the capture history and the covariates for each bird.
+# SMD: 
 
-    ################################################################################
-    ################################################################################
-    # Make columns that should be treated as factors into actual factors.
-    # They have been stored as strings up until this point.
-    # 
-    # 
-    # 
-    ################################################################################
-    ################################################################################
-    birbs$Malaria = as.factor(birbs$Malaria)
-    birbs$Station = as.factor(birbs$Station)
-    birbs$Sex     = as.factor(birbs$Sex)
-    birbs$Net     = as.factor(birbs$Net)
+    if ( F ) {
+        ################################################################################
+        # Step 7: Add summary variables to the MARK data
+        ################################################################################
+        
+        # This plucks off the first reading for each bird. 
+        # Since we applied sex and winglength for everyone, 
+        # this should be fine to pull the variables from.
+        # You'll have to modify the pims from the non summary data, 
+        # but how useful is that? Your msm captures daily, unique variation
+        NOCA_Unique <- NOCA
+        NOCA_Unique <- NOCA_Unique %>% distinct(NOCA$BandNumber, .keep_all = TRUE)
 
+        # Pare down the NOCA frame from merging
+        NOCA_Unique <- NOCA_Unique[c("BandNumber", "Sex", "MeanWing", "Malaria", "CJS", "IntAge","season")]
 
+        # SMD: This will merge the the covariates from NOCA_Unique 
+        # SMD: and the capture histories from Marky.
+            # Merge on bandnumber
+            Marky = merge( Marky, NOCA_Unique, by=c('BandNumber') )
 
+        # SMD: Blank the DateList columns from Marky.
+        # SMD: Doesn't really remove it, just sets all
+        # SMD: the values to NULL.
+            #remove the datelist, not needed anymore
+            Marky$DateList <- NULL
+
+        #combine into mark dataframe, remove everyone who didn't have a mean wing
+        ##loses 40 individuals
+        #browser()
+        setnames(Marky, "BandNumber", "id")
+        setnames(Marky, "CJS", "freq")
+        setnames(Marky, "CH", 'ch')
+        #give them mark names
+    }
+
+# SMD: This section creates a dataframe with the length of time between 
+# SMD: capture events. Time here is measured in months. This code is not
+# SMD: needed any longer since I deal with this earlier where all the other date
+# SMD: functions are handled.
+# SMD: 
+    if ( F ) {
+        ################################################################################
+        # Step 8: Make capture intervals (not equal, so needs to be set)
+        ################################################################################
+
+        # Create a new data frame called ranker to rank the date.
+        # This makes a one column dataframe with each date as a seperate entry
+        # sorted so it matches up with interval
+            cat('Making Cap.Int data\n')
+            ranker=data.frame( date = sort( unique(datelist$Date)) )
+
+        # First create a new string named interval by subtracting the subsequent capture dates
+        # First step is to put #caps into a var
+            caps     = nrow(ranker) #Number of captures
+            interval = rep(NA,caps) #Empty list with N/A
+
+        # This fills in each space in interval with the number of days between capture occassions
+            for(i in 2:nrow(ranker)){
+              interval[i] = (ranker$date[i]-ranker$date[i-1])
+            }
+
+        # Message to track where we are
+            cat('Create Cap.Int Data\n')
+
+        # Now create a data frame
+        # This gives the interval since last and applies to date. First is NA since new
+            cap.int=data.frame(ranker$date,interval)
+            cap.int$occIndex = 1:nrow(cap.int)
+
+        # Create a new column in ranker data frame to rank the dates
+        # I'm not sure this is still neccessary since we sort things already. 
+        # This may be an artifact of Binab.
+            ranker$rank<-1:nrow(ranker)
+
+        # Add new column for interval in months
+        # This gives you the amount of time in between captures in terms of months
+            cat('Create interval data\n')
+            cap.int$monthlyinterval=round(cap.int$interval/30,digits=3)
+    }
+
+# SMD: In this section Eric is making the process data 
+# SMD: and the design data. 
+# SMD:
     ################################################################################
-    # Step 6: Create MARK sheet with MSM History
+    # Step 9: Massage for MARK (Remove missing values)
     #
     ################################################################################
-    Marky <- as.data.frame(unique(NOCA$BandNumber))
-    setnames(Marky, "unique(NOCA$BandNumber)", "BandNumber")
-    #Using BandNumber for merge function below. This prevents mishaps from ordering
-    ##order doesn't matter, it'll match by function. 
+        cat('Process data\n')
+        Marky$IntAge <- as.factor(Marky$IntAge)
+        Marky$Malaria <- as.factor(Marky$Malaria)
+        Marky$season <- as.factor(Marky$season)
 
-    Marky$CH <- 0
-    #Create column to hold capture histories
+        #CH must be a character
+        Marky$ch <- as.character(Marky$ch)
 
-###################
-#Here you make your MSM variable in question
-###################
-#####
-#FAT
-#we have turned missing into U above
-beforeFatRem  <- length(unique(NOCA$BandNumber))
-NOCA <- NOCA[which(NOCA$Fat != 'U'),]
-afterFatRem  <- length(unique(NOCA$BandNumber))
-diffy = beforeFatRem - afterFatRem
+        NOCA.proc <- process.data(Marky, model = "Pradrec", groups = c("Sex", "season","IntAge"), time.intervals = cap.int$monthlyinterval[2:caps])
 
-cat('MSM_Tobin_Original.R: Msg: Removed birds without fat captured only once. This removes',diffy ,'NOCA individuals.\n')
+        numNocaEnd <- length(unique(Marky$id))
 
-#NOCAfat = aggregate(NOCA$Fat~NOCA$BandNumber + NOCA$Date, NOCA, paste, collapse=',')
-#create DF with unique fat for each bird on each day of its individual capture
-#Is and should be same length as NOCA
-NOCAfat = aggregate(NOCA$CJS~NOCA$BandNumber + NOCA$Date, NOCA, paste, collapse=',')
+        cat('MSM_Tobin_Original.R: Msg: Through the data sanitation process, we have lost', numNocaBegin-numNocaEnd,'for missing data. This is a loss of',  (((numNocaBegin- numNocaEnd)/numNocaBegin)*100),'% of the NOCAs.\n')
 
+        cat('Make design data\n')
+        timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
+        timestart = as.character(timestart)
+        NameForFile =paste0('NOCA.ddl_',timestart)
+        NameForFile2 =paste0('NOCA.proc_',timestart)
 
+        NOCA.ddl <- make.design.data(NOCA.proc)
 
-setnames(NOCAfat, 'NOCA$BandNumber', 'BandNumber')
-setnames(NOCAfat, 'NOCA$Date',       'Date')
-setnames(NOCAfat, 'NOCA$CJS',        'Fat')
-#Change the names to make life easier. 
-###################
-
-NOCAcaps <- aggregate(NOCA$Date~NOCA$BandNumber, NOCA, paste, collapse=",")
-names(NOCAcaps) = c('BandNumber', 'DateList')
-#This will be how we create the different MSMs. Let's try with CJS, make sure it works
-
-Marky = merge( Marky, NOCAcaps, by=c('BandNumber') )
-#Go through by hand and make sure they are correct
-###get a random sample, check them puppies
-#creates a df with BandNumber, blank CH, and the DateList. This marries dates of capture with band# and CH
-#You get the datelist from NOCAcaps applied to Marky. Guess we could've just done one dataframe here? Don't see why we need two...
-
-#Below we create the capture histories from the date lists
-#using full date index, you make string at that length of zeros subbing in your 
-##variables you toook out in the above subsection
-if (F){
-    for ( r in 1:nrow(Marky) ) {
-        thisBird = subset(NOCAfat, BandNumber == Marky$BandNumber[r])
-        #creates dataframe with BN, each dates, and fat reading
-        ##new one made for each bird
-        temp = merge(datelist, thisBird, by.x='Date', by.y='Date', all.x=TRUE)
-        #create holding frame that is datelist, but added band number and fat
-        temp$Fat[is.na(temp$Fat)] = '0'
-        #this will sub in zeros for fat on days you didn't capture. 
-        ##why it's important to convert na to something before, otherwise a false negative capture
-        Marky$CH[r] = paste( temp$Fat, collapse='')
-        #this collapses the fat column into a ch. Puts back into marky by index position
-    }
-}
-
-if ( T ){ #this is for using CJS models and Pradels
-  for ( r in 1:nrow(Marky) ) {
-    
-    thisBird = subset(NOCAfat, BandNumber == Marky$BandNumber[r])
-    #creates dataframe with BN, each dates, and fat reading
-    ##new one made for each bird
-    temp = merge(datelist, thisBird, by.x='Date', by.y='Date', all.x=TRUE)
-    #create holding frame that is datelist, but added band number and fat
-    temp$Fat[is.na(temp$Fat)] = '0'
-    #this will sub in zeros for fat on days you didn't capture. 
-    ##why it's important to convert na to something before, otherwise a false negative capture
-    Marky$CH[r] = paste( temp$Fat, collapse='')
-    #this collapses the fat column into a ch. Puts back into marky by index position
-  }
-}
-
-################################################################################
-# Step 7: Add summary variables to the MARK data
-################################################################################
-NOCA_Unique <- NOCA
-NOCA_Unique <- NOCA_Unique %>% distinct(NOCA$BandNumber, .keep_all = TRUE)
-#this plucks off the first reading for each bird. Since we applied sex and winglength for everyone, this should be fine to pull the variables from
-###you'll have to modify the pims from the non summary data, but how useful is that? Your msm captures daily, unique variation
-
-NOCA_Unique <- NOCA_Unique[c("BandNumber", "Sex", "MeanWing", "Malaria", "CJS", "IntAge","season")]
-#Pare down the NOCA frame from merging
-
-Marky = merge( Marky, NOCA_Unique, by=c('BandNumber') )
-#Merge on bandnumber
-
-Marky$DateList <- NULL
-#remove the datelist, not needed anymore
-#combine into mark dataframe, remove everyone who didn't have a mean wing
-##loses 40 individuals
-#browser()
-setnames(Marky, "BandNumber", "id")
-setnames(Marky, "CJS", "freq")
-setnames(Marky, "CH", 'ch')
-#give them mark names
-
-################################################################################
-# Step 8: Make capture intervals (not equal, so needs to be set)
-################################################################################
-##create a new data frame called ranker to rank the date.
-cat('Making Cap.Int data\n')
-ranker=data.frame( date = sort( unique(datelist$Date)) )
-###This makes a one column dataframe with each date as a seperate entry
-#sorted so it matches up with interval
-
-caps     = nrow(ranker) #Number of captures
-interval = rep(NA,caps) #Empty list with N/A
-# first create a new string named interval by subtracting the subsequent capture dates
-###First step is to put #caps into a var
-
-for(i in 2:nrow(ranker)){
-  interval[i] = (ranker$date[i]-ranker$date[i-1])
-}
-###This fills in each space in interval with the number of days between capture occassions
-
-###Test message to track where we are
-cat('Create Cap.Int Data\n')
-
-# now create a data frame
-###This gives the interval since last and applies to date. First is NA since new
-cap.int=data.frame(ranker$date,interval)
-cap.int$occIndex = 1:nrow(cap.int)
-
-## create a new column in ranker data frame to rank the dates
-ranker$rank<-1:nrow(ranker)
-#I'm not sure this is still neccessary since we sort things already. This may be an artifact of Binab.
-
-## add new column for interval in month
-###This gives you the amount of time in between captures in terms of months
-cat('Create interval data\n')
-cap.int$monthlyinterval=round(cap.int$interval/30,digits=3)
-
-################################################################################
-# Step 9: Massage for MARK (Remove missing values)
-################################################################################
-cat('Process data\n')
-Marky$IntAge <- as.factor(Marky$IntAge)
-Marky$Malaria <- as.factor(Marky$Malaria)
-Marky$season <- as.factor(Marky$season)
-
-#CH must be a character
-Marky$ch <- as.character(Marky$ch)
-
-NOCA.proc <- process.data(Marky, model = "Pradrec", groups = c("Sex", "season","IntAge"), time.intervals = cap.int$monthlyinterval[2:caps])
-
-numNocaEnd <- length(unique(Marky$id))
-
-cat('MSM_Tobin_Original.R: Msg: Through the data sanitation process, we have lost', numNocaBegin-numNocaEnd,'for missing data. This is a loss of',  (((numNocaBegin- numNocaEnd)/numNocaBegin)*100),'% of the NOCAs.\n')
-
-cat('Make design data\n')
-timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
-timestart = as.character(timestart)
-NameForFile =paste0('NOCA.ddl_',timestart)
-NameForFile2 =paste0('NOCA.proc_',timestart)
-
-
-NOCA.ddl <- make.design.data(NOCA.proc)
-
-save(NOCA.ddl, file= NameForFile)
-save(NOCA.proc, file = NameForFile2)
+        save(NOCA.ddl, file= NameForFile)
+        save(NOCA.proc, file = NameForFile2)
 
 #NOCA.ddl = add.design.data(NOCA.proc, NOCA.ddl, parameter = "S", type = "time", bins=c(0,11.95,23.4,35.4,47.4,59.4,71.4,83.4,95.4,107.4), name = "year")
 #NOCA.ddl = add.design.data(NOCA.proc, NOCA.ddl, parameter = "S", type = "time", bins=c(0, 11.95 + 0:8*12 ), name = "year", replace=TRUE)
