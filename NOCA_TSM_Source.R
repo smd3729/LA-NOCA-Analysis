@@ -46,24 +46,34 @@ Version = 'SMD'
 ##
 ################################################################################
 ################################################################################
-    # Clean up the name space so we are starting from scratch.
-    rm(list=ls())
-    assign("last.warning", NULL, envir = baseenv())
+    # Step 0.1: Clean up the name space so we are starting from scratch.
+        rm(list=ls())
+        assign("last.warning", NULL, envir = baseenv())
 
-    # Load the nessisary R packages. I'm ont sure all of these are currently
-    # being used in this version, but they have been used in the past. 
-    library(RMark)
-    library(ggplot2)   
-    library(msm)
-    library(data.table)
-    library(stringi)
-    library(stringr)
-    library(rlist)
-    library(plyr)
-    #library(multcomp)
-    #library(lsmeans)
-    library(dplyr)
-    #library(sendmailR)
+    # Step 0.2: Load the nessisary R packages. 
+    # I'm ont sure all of these are currently
+    # being used in this version, but they have 
+    # been used in the past. 
+        library(RMark)
+        library(ggplot2)   
+        library(msm)
+        library(data.table)
+        library(stringi)
+        library(stringr)
+        library(rlist)
+        library(plyr)
+        #library(multcomp)
+        #library(lsmeans)
+        library(dplyr)
+        #library(sendmailR)
+
+    # Step 0.3: Define user configurable parameters
+    filenameBirbs = 'labo database malaria.csv'
+
+    filenameTemplate  = 'NOCA_TSM_Source_<field>.<type>'
+    filenameDLL       = filenameTemplate %>% str_replace('<field>','_DLL') %>% str_replace('type','dll')
+    filenameProc      = filenameTemplate %>% str_replace('<field>','_Proc') %>% str_replace('type','proc')
+    
 
 
 ################################################################################
@@ -73,7 +83,6 @@ Version = 'SMD'
 ################################################################################
 ################################################################################
     # Set the name of the combined labo/malaria database
-    filenameBirbs = 'labo database malaria.csv'
 
     # Print a message to the screen
     cat('NOCA_TSM_Source.R: Msg: Step 1: Reading CSV data\n')
@@ -92,7 +101,7 @@ Version = 'SMD'
 ## We need to fix a few column names, make sure dates are treated as dates.
 ##
 ## Next we need to fix a few anomolies in the date date. In particular
-## there are some back-to-back banding occations that I think are probably
+## there are some back-to-back banding occasions that I think are probably
 ## recording errors. 
 ##
 ## Next we need to strip the data down to just those records that we really 
@@ -114,6 +123,7 @@ Version = 'SMD'
 ##
 ################################################################################
 ################################################################################
+
     # Print out a status message so we know where we are inthe script. 
     cat('NOCA_TSM_Source.R: Msg: Step 2: Clean the data\n')
 
@@ -121,6 +131,7 @@ Version = 'SMD'
     # Step 2.1: Rename columns
     #
     ################################################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 2.1: Renaming columns\n')
         # Change the column name "BandingStation" to just "Station"
         setnames(birbs, "BandingStation", "Station")
 
@@ -134,11 +145,13 @@ Version = 'SMD'
     #           We will also fix some broken date information.
     #           
     ################################################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 2.2: Processing date information\n')
 
         ############################################################
         # Step 2.2.1: Create a Date column and give it the correct type. 
         #
         ############################################################
+        cat('NOCA_TSM_Source.R: Msg: Step 2.2: Creating date column\n')
             birbs$Date = paste(birbs$Year, birbs$Month, birbs$Day, sep = "-")
             birbs$Date = as.Date(birbs$Date, "%Y-%m-%d")
 
@@ -155,6 +168,7 @@ Version = 'SMD'
         #             At any rate, for simplicity, we'll merge each pair into a single date.
         #
         ############################################################
+        cat('NOCA_TSM_Source.R: Msg: Step 2.2: Fixing some back-to-back banding dates\n')
 
             # This pair is a Monday and a Tuesday. 
             birbs$Date[birbs$Date == as.Date("2011-04-17")] = as.Date("2011-04-16")
@@ -187,6 +201,7 @@ Version = 'SMD'
         #             and removes them. These are not same-day recaptures, they are errors in the LABO database. 
         #
         ############################################################
+        cat('NOCA_TSM_Source.R: Msg: Step 2.2.3: Removing double records\n')
    
             # Step 1: Create an auxiliar data.frame that has one row for each band number and the list of capture dates
             # associated with that band number. 
@@ -194,7 +209,7 @@ Version = 'SMD'
 
             # Step 2: Cycle over the unique band numbers here. For each
             # band number, check the list of dates. If there are replicates 
-            # remove the redudent records. There are more efficient ways 
+            # remove the redundent records. There are more efficient ways 
             # to do this in R, but this works and is sensible. 
             for (i in 1:nrow(dateDouble)){
 
@@ -258,7 +273,8 @@ Version = 'SMD'
         #             April 1st and August 7th, inclusive. 
         #
         ############################################################
-            index               = (4 <= birbs$Month) & ( birbs$Month < 8 | ( birbs$Month == 8 & birbs <= 7 ) )
+        cat('NOCA_TSM_Source.R: Msg: Step 2.2.4: Adding seasons\n')
+            index               = (4 <= birbs$Month) & ( birbs$Month < 8 | ( birbs$Month == 8 & birbs$Day <= 7 ) )
             birbs$Season        = 'Nonbreeding'
             birbs$Season[index] = 'Breeding'
 
@@ -266,6 +282,7 @@ Version = 'SMD'
         # Step 2.2.5: Find report and remove the number of same day recaptures.  
         #
         ################################################################################
+        cat('NOCA_TSM_Source.R: Msg: Step 2.2.5: Removing same day recaptures\n')
             index = birbs$Code == 'S'
             cat('NOCA_TSM_Source.R: Msg: Number of same day recaptures = ', sum(index), '\n')
 
@@ -282,11 +299,11 @@ Version = 'SMD'
     #           At this point we need to also get a full list of capture dates 
     #           from the "raw" banding database. Technically, we cannot use the 
     #           NOCA portion of the database to do this because if we captured no 
-    #           NOCA's on a date, then that capture occation will not appear in the 
+    #           NOCA's on a date, then that capture occasion will not appear in the 
     #           NOCA database. This omission could mess with the estimates of p, 
     #           the capture probability. However, there are two points to raise 
     #           here. First, if we captured no birds at all on a banding date, then
-    #           trying to extract the capture occations from the banding database 
+    #           trying to extract the capture occasions from the banding database 
     #           is the wrong approach and we should use another part of the banding 
     #           log to get this. Second, I think we could use just the NOCA capture
     #           dates for analyzing the NOCAs. If there was a banding date when we 
@@ -295,13 +312,39 @@ Version = 'SMD'
     #           could just be folded into the next p probability. Since Mark will 
     #           know the length of time between capture dates and will raise p to 
     #           the appropriate value, I'm not sure this is important. 
+    # 
+    #           Based on code later in Eric's version of the script, the capture date
+    #           dataframe needs to have the following columns:
+    #           
+    #           season   = breeding vs non-breeding.
+    #           yearReal = calendar year, (2010, 2011, etc ...)
+    #           year     = year count starting at 1.
+    #           smdYear  = special year that counts years synchronous with the start
+    #                      of the breeding season.
+    #           
+    #           However, some of these details, like season, are redunant with 
+    #           features from step 2.2.4. It would be worthwhile checking whether or
+    #           not step 2.2.4 is needed. 
+    # 
     ################################################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 2.3: Creating capture date dataframe\n')
+    cat('NOCA_TSM_Source.R: Msg: Step 2.3: NOTE: This needs to be synchronized with the reduction of the\n')
+    cat('NOCA_TSM_Source.R: Msg: Step 2.3: NOTE: banding data in the next section to make sure the same \n')
+    cat('NOCA_TSM_Source.R: Msg: Step 2.3: NOTE: station and date range is selected. \n')
     temp      = subset( birbs, Station %in% c('HOME','BAMB') & Date > as.Date('2010-03-30') ) 
     capDateDF = tibble( Date = temp$Date %>% unique() %>% sort(), delta = c(0, Date[2:length(date)] - Date[2:length(date)-1] ) )
 
     # Mesure the intervals in months. 
-    capDateDF$delta = capDateDF$delta/30
+    capDateDF$monthlyinterval = capDateDF$delta/30
 
+    index                   = (4 <= birbs$Month) & ( (birbs$Month < 8 ) | ( birbs$Month == 8 & birbs$Day <= 7 ) ) 
+    capDateDF$season        = 'Nonbreeding'
+    capDateDF$season[index] = 'Breeding'
+    capDateDF$yearReal      = year(capDateDF$Date)
+    capDateDF$year          = capDateDF %>% with( { yearReal - min(yearReal) + 1 })
+    capDateDF$occasion      = cumsum(capDateDF$monthlyinterval)
+
+    cap.int = capDateDF
 
 ################################################################################
 ################################################################################
@@ -311,6 +354,7 @@ Version = 'SMD'
 ################################################################################
 ################################################################################
 
+    cat('NOCA_TSM_Source.R: Msg: Step 3: Subsetting by species, station and date\n')
     working = subset( birbs, SpeciesCode == 'NOCA' & Station %in% c('HOME','BAMB') & Date > as.Date('2010-03-30') ) 
 
     # Deal with sex in one place. See below.
@@ -346,6 +390,7 @@ Version = 'SMD'
     #           Refer to project log v.2 on 21feb2019 to see if this needs changing
     #
     ################################################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 3: Reporting Net 99 records\n')
         cat('NOCA_TSM_Source.R: Msg: Number of NOCA captures in net 99 = ', sum(working$Net == 99), '\n' )
         cat('NOCA_TSM_Source.R: Msg: Number of unique NOCAs in net 99  = ', subset(working, Net == 99)$BandNumber %>% unique() %>% length(), '\n' )
 
@@ -358,6 +403,7 @@ Version = 'SMD'
 ##
 ################################################################################
 ################################################################################
+cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
 
     #################################################
     # Step 4.1: Sex sanity check. (For NOCA only.)
@@ -366,6 +412,7 @@ Version = 'SMD'
     # We need to fix these. 
     #
     #################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing sex\n')
 
         #################################################
         # Step 1: Fix blank sex records
@@ -489,6 +536,7 @@ Version = 'SMD'
     # warning to the user. 
     #
     ################################################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing age\n')
 
         # Get the unqiue age classes. 
         ages             <- unique( working$Age )
@@ -611,6 +659,7 @@ Version = 'SMD'
     #
     #
     ################################################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 4: Creating initial age\n')
 
         if ( Version == 'SMD' ) {
             # Step SMD-2,3 and 4 are equivalent to steps EJT-2,3 and 4, but
@@ -779,6 +828,7 @@ Version = 'SMD'
     # Step 4.4: Prep the fat data
     #
     ################################################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing fat\n')
         if ( Version == 'SMD' )  {
             # Step 1: Reclass the fat data.
             #
@@ -861,12 +911,13 @@ Version = 'SMD'
     # Step 4.5: Prep the mean wing length data
     #
     ################################################################################
-    wingDF      = aggregate(RightWing ~ BandNumber, working, paste, collapse = ',')
-    wingDF$mean = apply(wingDF, 1, function(row) {row['RightWing'] %>% strsplit(split=',') %>% unlist() %>% as.numeric() %>% mean(na.rm=T) } )
-    noWingDF    = subset( wingDF, is.na(wingDF$mean) | wingDF$mean == 0 )
-    cat('NOCA_TSM_Source.R: Msg: Checking and removing birds with no wing data\n')
-    cat('NOCA_TSM_Source.R: Msg: There are ',nrow(noWingDF),' birds with no wing data\n')
-    working = subset(working, !( BandNumber%in%noWingDF$BandNumber) )
+    cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing mean wing data\n')
+        wingDF      = aggregate(RightWing ~ BandNumber, working, paste, collapse = ',')
+        wingDF$mean = apply(wingDF, 1, function(row) {row['RightWing'] %>% strsplit(split=',') %>% unlist() %>% as.numeric() %>% mean(na.rm=T) } )
+        noWingDF    = subset( wingDF, is.na(wingDF$mean) | wingDF$mean == 0 )
+        cat('NOCA_TSM_Source.R: Msg: Checking and removing birds with no wing data\n')
+        cat('NOCA_TSM_Source.R: Msg: There are ',nrow(noWingDF),' birds with no wing data\n')
+        working = subset(working, !( BandNumber%in%noWingDF$BandNumber) )
 
 ################################################################################
 # Left over code that doesn't really do anything anymore. 
@@ -974,22 +1025,14 @@ Version = 'SMD'
 
 ################################################################################
 ################################################################################
-################################################################################
-###### This is next big section of the code. In this section, we are 
-###### compiling the banding data into a form that can be used directly 
-###### by Mark. In particular, we are creating one record per bird.
-######
-######
-################################################################################
+## Step 5: Create Mark formatted data
+##
+##
 ################################################################################
 ################################################################################
 
-    ################################################################################
-    # Step 5: Reformat the data for Mark
-    #
-    ################################################################################
     if ( Version == 'SMD' ) {
-        # Step 1: Create the dataframe that will hold the mark formatted data. 
+        # Step 5.1: Create the dataframe that will hold the mark formatted data. 
         # As a first step, just add the band numbers. After the band numbers are
         # added, we need to add the following columns:
         # Sex
@@ -1002,7 +1045,7 @@ Version = 'SMD'
         #
         markData = tibble( id         = NOCA$BandNumber %>% unique() %>% sort() )
 
-        # Step 2: Add Sex
+        # Step 5.2: Add Sex
         #         At this point, the working dataframe should be fixed 
         #         so that each bird has only a single sex. 
             sexDF        = aggregate(Sex~BandNumber, working, function(sex) { sex %>% unlist() %>% sort() %>% unique() %>% paste(collapse=',')} )
@@ -1013,31 +1056,32 @@ Version = 'SMD'
             markData = merge(markData, sexSF, by = BandNumber )
             remove('sexDF')
 
-        # Step 3: Add MeanWing
+        # Step 5.3: Add MeanWing
             wingDF       = aggregate(RightWing~BandNumber, working, mean, na.rm=T)
             markData     = merge(markData, wingDF, by = BandNumber) %>% rename(MeanWing = RightWing)
             remove('wingDF')
 
-        # Step 4: Add Malaria
+        # Step 5.4: Add Malaria
             malariaDF    = aggregate(Malaria~BandNumber, working, function(mal) {mal %>% unlist() %>% unique() %>% paste(collapse=',')} )
             markData     = merge(markData, malariaDF, by = BandNumber)
             remove('malariaDF')
         
-        # Step 5: Add freq/CJS
+        # Step 5.5: Add freq/CJS
         #         In Eric's code below CJS appears to be just a column of 1's.
         #         Moreover, CJS/freq does not appear to be used. So, I'm going
         #         to skip it for now.
             
-        # Step 6: Add IntAge
+        # Step 5.6: Add IntAge
             ageDF    = aggregate(Age~BandNumber, working, function( age ) { (age %>% unlist())[1]   } )
             markData = merge(markData, ageDF, by = BandNumber )
+            markData = markData %>% rename(IntAge = Age)
             remove('ageDF')
 
-        # Step 7: Add season
+        # Step 5.7: Add season
         #         I'm not sure how this one is supposed to work.
         #         I'll have to ask Eric.
 
-        # Step 8: Add capture history
+        # Step 5.8: Add capture history
         markData$ch = ''
         dateDF = aggregate(Date ~ BandNumber, working, paste, collapse=',')
         for ( bandNum in dataDF$BandNumber ) {
@@ -1046,26 +1090,55 @@ Version = 'SMD'
             markData$ch[markData$BandNumber == bandNum] = ch
         }
 
+        # Step 9: Give all the columns their correct type.
+        markData$Sex     = as.factor(markData$Sex)
+        markData$IntAge  = as.factor(markData$IntAge)
+        markData$Malaria = as.factor(markData$Malaria)
+
+
     } else {
-        # SMD: Several things are happening in this section of Eric's code. In order, the 
-        # SMD: events are:
+        # SMD: Several things are happening in this section of Eric's code. 
+        # SMD: Here is a list of the events and what I've done to move/recreate
+        # SMD: these events in my version of the code:
+        # SMD: 
         # SMD:      1) Get list of unique band numbers and put it in NOCABands. 
+        # SMD:         NOCABands isn't used, so I've omitted it.
+        # SMD:         
         # SMD:      2) Add a column called CJS to NOCA dataframe. 
+        # SMD:         CJS appears to be just a column of ones. The
+        # SMD:         column gets renamed "freq" later, but it isn's used,
+        # SMD:         so I've omitted it.
+        # SMD:         
         # SMD:      3) Add mean wing length to the NOCA dataframe. 
         # SMD:      4) Remove birds that do not have mean wing lengths from NOCA dataframe.
+        # SMD:         I've added code above in Step 4.5 and 5.1 to deal with these two events.
+        # SMD:         
         # SMD:      5) Make several columns in the birbs dataframe factors. 
+        # SMD:         NOTE: I don't appear to have handled this yet. 
+        # SMD:         
         # SMD:      6) Create a dataframe to hold the data that will be given to Mark.
         # SMD:         The dataframe, called Marky, has band numbers and a place to hold
         # SMD:         hold capture histories.
+        # SMD:         
+        # SMD:         This is handled in my Step 5 above. 
+        # SMD:         
         # SMD:      7) Remove birds with no fat data from NOCA dataframe. 
+        # SMD:         This is handled in Step 4.4 above.
+        # SMD:         
         # SMD:      8) Make an auxiliary dataframe used to create capture histories.
         # SMD:         This dataframe gets called NOCAfat, which is non-intuitive and confusing. 
+        # SMD:         
+        # SMD:         This is handled in Step 5 above. 
+        # SMD:         
         # SMD:      9) Create an auxiliar dataframe, called NOCACaps, that lists capture dates 
         # SMD:         for each band number. 
         # SMD:     10) Merge Marky and the auxiliar dataframe
         # SMD:     11) Actually create the capture history
-        # SMD: 
-        # SMD: 
+        # SMD:         
+        # SMD:         These last three steps make the final dataframe to hand to Mark. 
+        # SMD:         This is handled in Step 5 above. 
+        # SMD:         
+        # SMD:         
 
             ################################################################################
             # Step 5: Create Summary Variables
@@ -1237,9 +1310,14 @@ Version = 'SMD'
                     }
     }
 
+################################################################################
+################################################################################
 # SMD: This section of Eric's code produces a dataframe that
 # SMD: merges the capture history and the covariates for each bird.
+# SMD: This code is no longer needed as it is handled in Step 5 above.  
 # SMD: 
+################################################################################
+################################################################################
 
     if ( F ) {
         ################################################################################
@@ -1277,19 +1355,23 @@ Version = 'SMD'
         #give them mark names
     }
 
+################################################################################
+################################################################################
 # SMD: This section creates a dataframe with the length of time between 
 # SMD: capture events. Time here is measured in months. This code is not
 # SMD: needed any longer since I deal with this earlier where all the other date
 # SMD: functions are handled.
 # SMD: 
+################################################################################
+################################################################################
     if ( F ) {
         ################################################################################
         # Step 8: Make capture intervals (not equal, so needs to be set)
         ################################################################################
 
-        # Create a new data frame called ranker to rank the date.
+        # Create a new dataframe called ranker to rank the dates.
         # This makes a one column dataframe with each date as a seperate entry
-        # sorted so it matches up with interval
+        # sorted in order of dates. 
             cat('Making Cap.Int data\n')
             ranker=data.frame( date = sort( unique(datelist$Date)) )
 
@@ -1320,39 +1402,68 @@ Version = 'SMD'
         # This gives you the amount of time in between captures in terms of months
             cat('Create interval data\n')
             cap.int$monthlyinterval=round(cap.int$interval/30,digits=3)
+
+        # At the end, cap.int should have the following columns:
+        #
+        # ranker.date = a ordered list of capture dates. 
+        #
+        # interval = The interval, in days, a date and the previous capture date.
+        #            The first element is NA.
+        #
+        # occIndex = a sequential index for the dates dates. 
+        #
+        # monthlyinterval = the intervals measured in months. 
+        #
+        #
     }
 
+################################################################################
+################################################################################
 # SMD: In this section Eric is making the process data 
 # SMD: and the design data. 
 # SMD:
-    ################################################################################
-    # Step 9: Massage for MARK (Remove missing values)
-    #
-    ################################################################################
-        cat('Process data\n')
-        Marky$IntAge <- as.factor(Marky$IntAge)
-        Marky$Malaria <- as.factor(Marky$Malaria)
-        Marky$season <- as.factor(Marky$season)
+################################################################################
+################################################################################
+    if ( Version = 'SMD' ) {
+        NOCA.proc = process.data( markData, 
+                                  model = 'Pradrec', groups = c('Sex', 'season', 'IntAge'),
+                                  time.intervals = capDateDF$delta[2:nrow(capDateDF)] )
 
-        #CH must be a character
-        Marky$ch <- as.character(Marky$ch)
+        NOCA.dll = make.design.date(NOCA.proc)
 
-        NOCA.proc <- process.data(Marky, model = "Pradrec", groups = c("Sex", "season","IntAge"), time.intervals = cap.int$monthlyinterval[2:caps])
+        save(NOCA.ddl,  file = filenameDLL)
+        save(NOCA.proc, file = filenameProc)
 
-        numNocaEnd <- length(unique(Marky$id))
+    } else {
+        ################################################################################
+        # Step 9: Massage for MARK (Remove missing values)
+        #
+        ################################################################################
+            cat('Process data\n')
+            Marky$IntAge <- as.factor(Marky$IntAge)
+            Marky$Malaria <- as.factor(Marky$Malaria)
+            Marky$season <- as.factor(Marky$season)
 
-        cat('MSM_Tobin_Original.R: Msg: Through the data sanitation process, we have lost', numNocaBegin-numNocaEnd,'for missing data. This is a loss of',  (((numNocaBegin- numNocaEnd)/numNocaBegin)*100),'% of the NOCAs.\n')
+            #CH must be a character
+            Marky$ch <- as.character(Marky$ch)
 
-        cat('Make design data\n')
-        timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
-        timestart = as.character(timestart)
-        NameForFile =paste0('NOCA.ddl_',timestart)
-        NameForFile2 =paste0('NOCA.proc_',timestart)
+            NOCA.proc <- process.data(Marky, model = "Pradrec", groups = c("Sex", "season","IntAge"), time.intervals = cap.int$monthlyinterval[2:caps])
 
-        NOCA.ddl <- make.design.data(NOCA.proc)
+            numNocaEnd <- length(unique(Marky$id))
 
-        save(NOCA.ddl, file= NameForFile)
-        save(NOCA.proc, file = NameForFile2)
+            cat('MSM_Tobin_Original.R: Msg: Through the data sanitation process, we have lost', numNocaBegin-numNocaEnd,'for missing data. This is a loss of',  (((numNocaBegin- numNocaEnd)/numNocaBegin)*100),'% of the NOCAs.\n')
+
+            cat('Make design data\n')
+            timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
+            timestart = as.character(timestart)
+            NameForFile =paste0('NOCA.ddl_',timestart)
+            NameForFile2 =paste0('NOCA.proc_',timestart)
+
+            NOCA.ddl <- make.design.data(NOCA.proc)
+
+            save(NOCA.ddl, file= NameForFile)
+            save(NOCA.proc, file = NameForFile2)
+    }
 
 #NOCA.ddl = add.design.data(NOCA.proc, NOCA.ddl, parameter = "S", type = "time", bins=c(0,11.95,23.4,35.4,47.4,59.4,71.4,83.4,95.4,107.4), name = "year")
 #NOCA.ddl = add.design.data(NOCA.proc, NOCA.ddl, parameter = "S", type = "time", bins=c(0, 11.95 + 0:8*12 ), name = "year", replace=TRUE)
@@ -1378,288 +1489,425 @@ Version = 'SMD'
 
 ## first create a dataframe with details of seasons
 ############
-cap.int$seasons=character(nrow(cap.int))
-cap.int$seasons2=character(nrow(cap.int))
-cat('Create Season and year Data\n')
-seasons= data.frame(
-  season=c("Breeding","NonBreeding","NonBreeding"),
-  offset  =c(1, 1, 0 ),
-  start=c ("04-01", "08-08", "01-01"),
-  end  =c("08-07","12-31", "03-31"), stringsAsFactors=F
-)
-cap.int$yearReal <- NA
-for (i in 1:nrow(cap.int)) {
-  cap.int$yearReal[i] <- as.numeric( strsplit(as.character(cap.int$ranker.date[i]),"-",fixed = TRUE)[[1]] )
-#create a year factor for cap.int, the reference date dataframe
-#you're gonna get warnings, they are fine to ignore
-}
-cap.int$year = cap.int$yearReal - min(cap.int$yearReal) + 1
 
-#cap.int$year <- as.Date(cap.int$year, "%Y")
-#probably need to coerce into a date, but meh, it works?
-yearlist=unique(cap.int$yearReal)
-# creating the list of unique years
+################################################################################
+################################################################################
+# SMD: Add a column to cap.int that measures the length of time
+# SMD: from the start of the banding process to each subsequent capture date. 
+# SMD: This code isn't needed any longer as I have dealth with this
+# SMD: in Step 2.3 where all the other date/time information is handled. 
+# SMD:
+# SMD: This section further modifieds cap.int, the dataframe
+# SMD: that keeps track of the capture dates. Below is a list
+# SMD: of the tasks performed by this section allow with a
+# SMD: description of how these tasks are achived in my version
+# SMD: of the code. Since all of these tasks are date related
+# SMD: I have moved all these tasks up to Step 2.3 where all 
+# SMD: of the other date related tasks are handled. 
+# SMD: 
+# SMD: 1) Add a column to cap.int called seasons of type char
+# SMD:    Moved to step 2.3
+# SMD:
+# SMD: 2) Add a column to cap.int called seasons2 of type char
+# SMD:
+# SMD: 3) Create an auxiliar dataframe to contain the details that
+# SMD:    define each season. 
+# SMD:
+# SMD: 4) Add yearReal to cap.int and fill it with NA's
+# SMD:    This column will store the actual calendar year 
+# SMD:    (2010, 2011, etc ...)
+# SMD:    Moved to step 2.3
+# SMD:
+# SMD: 5) Populate yearReal with year values.
+# SMD:    Moved to step 2.3
+# SMD:
+# SMD: 6) Add a year count column to cap.int
+# SMD:    Moved to step 2.3
+# SMD:
+# SMD: 7) Assign dates to seasons
+# SMD:    Moved to step 2.3
+# SMD:
+# SMD: 8) Make durration values. 
+# SMD:
+################################################################################
+################################################################################
 
-##yearlist= unique(format(cap.int$ranker.date,"%y")) does the same thing as above code
-#now binning the dates into seasons
-cap.int$smdYear = 0
-cnt = 0
-for( y in yearlist){
-  for ( i in 1:nrow(seasons)){
-    startdate = as.Date(paste(y,'-',seasons$start[i],sep=''))
-    enddate   = as.Date(paste(y,'-',seasons$end  [i],sep=''))
-    index=cap.int$ranker.date>=startdate & cap.int$ranker.date<=enddate
-    cap.int$seasons[index]=seasons$season[i]
-    cap.int$smdYear[index] = as.integer(y) + seasons$offset[i] - 2010
-   
-    
-  }
-}
-cap.int$smdYear = as.factor( cap.int$smdYear )
+if ( F ) {
+    # Step 1: Add a column to cap.int called seasons of type character. 
+    cap.int$seasons=character(nrow(cap.int))
 
-# to find out which capture occassion are in which season. 
+    # Step 2: Add a column to cap.int called seasons2 of type character. 
+    cap.int$seasons2=character(nrow(cap.int))
 
-occasion=rep(NA,nrow(cap.int))
-occasion[1]=1
-for(i in 1:(nrow(cap.int)-1)){occasion[i+1]=(occasion[i]+cap.int$monthlyinterval[i+1])}
+    cat('Create Season and year Data\n')
 
+    # Step 3: Make an auxiliary dataframe that defines the start and end
+    #         date of seasons. 
+    seasons= data.frame(
+      season=c("Breeding","NonBreeding","NonBreeding"),
+      offset  =c(1, 1, 0 ),
+      start=c ("04-01", "08-08", "01-01"),
+      end  =c("08-07","12-31", "03-31"), stringsAsFactors=F
+    )
 
+    # Step 4: SpAdd a column to cap.int called yearReal, filll is NA's
+    cap.int$yearReal <- NA
 
-cap.int$occasion=occasion
-cap.int$year=format(cap.int$ranker.date,"20%y")
-
-cat('Adding Season to DDL\n')
-Breeding_occasion= cap.int$occasion[cap.int$seasons=="Breeding"]
-NonBreeding_occasion= cap.int$occasion[cap.int$seasons=="NonBreeding"]
-#assign season to the different ranges of dates
-
-NOCA.ddl$Phi$season='Breeding'
-NOCA.ddl$Phi$season[ NOCA.ddl$Phi$time%in%(NonBreeding_occasion) ]='NonBreeding'
-#add season effect to S
-NOCA.ddl$p$season='Breeding'
-NOCA.ddl$p$season[ NOCA.ddl$p$time%in%(NonBreeding_occasion) ]='NonBreeding'
-#add season effect to p
-NOCA.ddl$f$season='Breeding'
-NOCA.ddl$f$season[ NOCA.ddl$f$time%in%(NonBreeding_occasion) ]='NonBreeding'
-#add season effect to f
-NOCA.ddl$f$season=factor(NOCA.ddl$f$season)
-NOCA.ddl$p$season=factor(NOCA.ddl$p$season)
-NOCA.ddl$Phi$season=factor(NOCA.ddl$Phi$season)
-#with(NOCA.ddl$S, table(season, time))  
-
-
-cat('Adding Year to DDL\n')
-
-year1= cap.int$occasion[cap.int$smdYear==1]
-year2= cap.int$occasion[cap.int$smdYear==2]
-year3= cap.int$occasion[cap.int$smdYear==3]
-year4= cap.int$occasion[cap.int$smdYear==4]
-year5= cap.int$occasion[cap.int$smdYear==5]
-year6= cap.int$occasion[cap.int$smdYear==6]
-year7= cap.int$occasion[cap.int$smdYear==7]
-year8= cap.int$occasion[cap.int$smdYear==8]
-year9= cap.int$occasion[cap.int$smdYear==9]
-
-NOCA.ddl$Phi$year='1'
-NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year2) ]='2'
-NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year3) ]='3'
-NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year4) ]='4'
-NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year5) ]='5'
-NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year6) ]='6'
-NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year7) ]='7'
-NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year8) ]='8'
-NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year9) ]='9'
-#add year effect to S
-NOCA.ddl$p$year="1"
-NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year2) ]='2'
-NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year3) ]='3'
-NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year4) ]='4'
-NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year5) ]='5'
-NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year6) ]='6'
-NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year7) ]='7'
-NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year8) ]='8'
-NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year9) ]='9'
-#add year effect to p
-
-NOCA.ddl$f$year="1"
-NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year2) ]='2'
-NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year3) ]='3'
-NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year4) ]='4'
-NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year5) ]='5'
-NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year6) ]='6'
-NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year7) ]='7'
-NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year8) ]='8'
-NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year9) ]='9'
-#add year effect to f
-
-NOCA.ddl$f$year=factor(NOCA.ddl$f$year)
-NOCA.ddl$p$year=factor(NOCA.ddl$p$year)
-NOCA.ddl$Phi$year=factor(NOCA.ddl$Phi$year)
-
-cat('We cannot add ageNow to DDL. This section is toggled for more exploration with Scott (07April2019)\n')
-browser()
-if(F){
-NOCA.ddl$f$ageNow = NOCA.ddl$f$IntAge
-NOCA.ddl$Phi$ageNow = NOCA.ddl$Phi$IntAge
-NOCA.ddl$p$ageNow = NOCA.ddl$p$IntAge
-#attach(NOCA.ddl$Phi)
-for (i in 1:nrow(NOCA.ddl$Phi)){
-  if (NOCA.ddl$Phi$ageNow[i] == "Y"){
-    #horty <- occ.cohort[i]
-    
-    occFirst = NOCA.ddl$Phi$occ.cohort[i]
-    occThis  = NOCA.ddl$Phi$occ[i]
-    
-    yearFirst = as.numeric( cap.int$smdYear[ cap.int$occIndex == occFirst ] )
-    yearThis  = as.numeric( cap.int$smdYear[ cap.int$occIndex == occThis  ] )
-    if ( yearFirst == yearThis ) {
-        NULL; #Do nothing, this case is OK.   
-    } else if ( yearFirst < yearThis ) {
-        NOCA.ddl$Phi$ageNow[i] = 'A'
-    } else {
-        cat('WARNING: Something bad has happend. \n')
+    # Step 5: Cycle over the rows of cap.int. For each row
+    #         extract the year and store it in yearReal.
+    #         This is really the hard way to to do this. 
+    for (i in 1:nrow(cap.int)) {
+        # create a year factor for cap.int, the reference date dataframe
+        # you're gonna get warnings, they are fine to ignore
+        cap.int$yearReal[i] <- as.numeric( strsplit(as.character(cap.int$ranker.date[i]),"-",fixed = TRUE)[[1]] )
     }
-    
+
+    # Step 6: Add a column to cap.int that gives the year count
+    #         starting from 1. 
+    cap.int$year = cap.int$yearReal - min(cap.int$yearReal) + 1
+
+    # Step 7: Populate the seasons columns and
+    #         build smdYear
+
+    # Creating the list of unique years
+    # Probably need to coerce into a date, but meh, it works?
+    # cap.int$year <- as.Date(cap.int$year, "%Y")
+    yearlist=unique(cap.int$yearReal)
+
+    #yearlist= unique(format(cap.int$ranker.date,"%y")) does the same thing as above code
+
+    # This double-nested for-loop assigns seasons to each
+    # date. It also creates smdYear is a special year count designator.
+    # smdYear counts years as starting on April 1 and 
+    # ending on March 31 of the next year.
+    # 
+    # 
+    # Now binning the dates into seasons
+    cap.int$smdYear = 0
+    cnt = 0
+    for( y in yearlist){
+      for ( i in 1:nrow(seasons)){
+        startdate = as.Date(paste(y,'-',seasons$start[i],sep=''))
+        enddate   = as.Date(paste(y,'-',seasons$end  [i],sep=''))
+        index     = cap.int$ranker.date>=startdate & cap.int$ranker.date<=enddate
+        cap.int$seasons[index] = seasons$season[i]
+        cap.int$smdYear[index] = as.integer(y) + seasons$offset[i] - 2010
+        
+      }
+    }
+    cap.int$smdYear = as.factor( cap.int$smdYear )
+
+    # to find out which capture occasion are in which season. 
+
+    # Step 8: Get durration values. 
+    #         This section figures out the length of time
+    #         between the first capture occation and each 
+    #         subsequent occation. Seems like the hard way to do 
+    #         this. 
+    #
+
+    # Make an array of NA's as long as cap.int (the number of capture occasions)
+    occasion=rep(NA,nrow(cap.int))
+    # Set the first element to 1.
+    occasion[1]=1
+    # Cycle over all but the last element
+    # Set the value of each element of occation 
+    # equal to the previous value plus monthlyinterval
+    for(i in 1:(nrow(cap.int)-1)){
+        occasion[i+1]=(occasion[i]+cap.int$monthlyinterval[i+1])
+    }
+
+    # Push the delta time values into cap.int
+    cap.int$occasion=occasion
+
+    # Remake the year column to place them in the range 2000.
+    # But why do this, these values aren't real years and
+    # we already have real years? 
+    #
+    # cap.int$year isn't used, so this doesn't make
+    # a difference. 
+    cap.int$year=format(cap.int$ranker.date,"20%y")
+
+}
+
+################################################################################
+################################################################################
+# SMD: In this section we are modifying the data design layer by adding
+# SMD: season to Phi, p, and f
+# SMD: 
+################################################################################
+################################################################################
+
+    # Assign season to the different ranges of dates
+    cat('Adding Season to DDL\n')
+    Breeding_occasion    = cap.int$occasion[cap.int$seasons=="Breeding"]
+    NonBreeding_occasion = cap.int$occasion[cap.int$seasons=="NonBreeding"]
+
+    #add season effect to Phi
+    NOCA.ddl$Phi$season = 'Breeding'
+    NOCA.ddl$Phi$season[ NOCA.ddl$Phi$time%in%(NonBreeding_occasion) ] = 'NonBreeding'
+
+    #add season effect to p
+    NOCA.ddl$p$season='Breeding'
+    NOCA.ddl$p$season[ NOCA.ddl$p$time%in%(NonBreeding_occasion) ]='NonBreeding'
+
+    #add season effect to f
+    NOCA.ddl$f$season='Breeding'
+    NOCA.ddl$f$season[ NOCA.ddl$f$time%in%(NonBreeding_occasion) ]='NonBreeding'
+
+    NOCA.ddl$f$season   = factor(NOCA.ddl$f$season)
+    NOCA.ddl$p$season   = factor(NOCA.ddl$p$season)
+    NOCA.ddl$Phi$season = factor(NOCA.ddl$Phi$season)
+    #with(NOCA.ddl$S, table(season, time))  
+
+################################################################################
+################################################################################
+# SMD: In this section we are adding year to the DDL.
+# SMD: 
+################################################################################
+################################################################################
+
+    cat('Adding Year to DDL\n')
+
+    year1= cap.int$occasion[cap.int$smdYear==1]
+    year2= cap.int$occasion[cap.int$smdYear==2]
+    year3= cap.int$occasion[cap.int$smdYear==3]
+    year4= cap.int$occasion[cap.int$smdYear==4]
+    year5= cap.int$occasion[cap.int$smdYear==5]
+    year6= cap.int$occasion[cap.int$smdYear==6]
+    year7= cap.int$occasion[cap.int$smdYear==7]
+    year8= cap.int$occasion[cap.int$smdYear==8]
+    year9= cap.int$occasion[cap.int$smdYear==9]
+
+    NOCA.ddl$Phi$year='1'
+    NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year2) ]='2'
+    NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year3) ]='3'
+    NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year4) ]='4'
+    NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year5) ]='5'
+    NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year6) ]='6'
+    NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year7) ]='7'
+    NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year8) ]='8'
+    NOCA.ddl$Phi$year[ NOCA.ddl$Phi$time%in%(year9) ]='9'
+    #add year effect to S
+    NOCA.ddl$p$year="1"
+    NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year2) ]='2'
+    NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year3) ]='3'
+    NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year4) ]='4'
+    NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year5) ]='5'
+    NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year6) ]='6'
+    NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year7) ]='7'
+    NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year8) ]='8'
+    NOCA.ddl$p$year[ NOCA.ddl$p$time%in%(year9) ]='9'
+    #add year effect to p
+
+    NOCA.ddl$f$year="1"
+    NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year2) ]='2'
+    NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year3) ]='3'
+    NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year4) ]='4'
+    NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year5) ]='5'
+    NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year6) ]='6'
+    NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year7) ]='7'
+    NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year8) ]='8'
+    NOCA.ddl$f$year[ NOCA.ddl$f$time%in%(year9) ]='9'
+    #add year effect to f
+
+    NOCA.ddl$f$year=factor(NOCA.ddl$f$year)
+    NOCA.ddl$p$year=factor(NOCA.ddl$p$year)
+    NOCA.ddl$Phi$year=factor(NOCA.ddl$Phi$year)
+
+#
+#
+#
+#
+    cat('We cannot add ageNow to DDL. This section is toggled for more exploration with Scott (07April2019)\n')
+    browser()
+    if ( F ) {
+        NOCA.ddl$f$ageNow = NOCA.ddl$f$IntAge
+        NOCA.ddl$Phi$ageNow = NOCA.ddl$Phi$IntAge
+        NOCA.ddl$p$ageNow = NOCA.ddl$p$IntAge
+        #attach(NOCA.ddl$Phi)
+        for (i in 1:nrow(NOCA.ddl$Phi)) {
+            if (NOCA.ddl$Phi$ageNow[i] == "Y") {
+                #horty <- occ.cohort[i]
+
+                occFirst = NOCA.ddl$Phi$occ.cohort[i]
+                occThis  = NOCA.ddl$Phi$occ[i]
+
+                yearFirst = as.numeric( cap.int$smdYear[ cap.int$occIndex == occFirst ] )
+                yearThis  = as.numeric( cap.int$smdYear[ cap.int$occIndex == occThis  ] )
+
+                if ( yearFirst == yearThis ) {
+                    NULL; #Do nothing, this case is OK.   
+                } else if ( yearFirst < yearThis ) {
+                    NOCA.ddl$Phi$ageNow[i] = 'A'
+                } else {
+                    cat('WARNING: Something bad has happend. \n')
+                }
+
+            } else if (NOCA.ddl$Phi$ageNow[i] == "A") {
+            }
+        }
+        #detach(NOCA.ddl$Phi)
+        #attach(NOCA.ddl$p)
+        for (i in 1:nrow(NOCA.ddl$p)) {
+            if (NOCA.ddl$p$ageNow[i] == "Y") {
+                #horty <- occ.cohort[i]
+
+                occFirst = NOCA.ddl$p$occ.cohort[i]
+                occThis  = NOCA.ddl$p$occ[i]
+
+                yearFirst = as.numeric( cap.int$smdYear[ cap.int$occIndex == occFirst ] )
+                yearThis  = as.numeric( cap.int$smdYear[ cap.int$occIndex == occThis  ] )
+
+                if ( yearFirst == yearThis ) {
+                    NULL; #Do nothing, this case is OK.   
+                } else if ( yearFirst < yearThis ) {
+                    NOCA.ddl$p$ageNow[i] = 'A'
+                } else {
+                    cat('WARNING: Something bad has happend. \n')
+                }
+
+            } else if (NOCA.ddl$p$ageNow[i] == "A") {
+            }
+        }
+
+        for (i in 1:nrow(NOCA.ddl$f)) {
+            if (NOCA.ddl$f$ageNow[i] == "Y"){
+                #horty <- occ.cohort[i]
+
+                occFirst = NOCA.ddl$f$occ.cohort[i]
+                occThis  = NOCA.ddl$f$occ[i]
+
+                yearFirst = as.numeric( cap.int$smdYear[ cap.int$occIndex == occFirst ] )
+                yearThis  = as.numeric( cap.int$smdYear[ cap.int$occIndex == occThis  ] )
+
+                if ( yearFirst == yearThis ) {
+                    NULL; #Do nothing, this case is OK.   
+                } else if ( yearFirst < yearThis ) {
+                    NOCA.ddl$f$ageNow[i] = 'A'
+                } else {
+                    cat('WARNING: Something bad has happend. \n')
+                }
+
+            } else if (NOCA.ddl$f$ageNow[i] == "A"){
+            }
+        }
+
+        NOCA.ddl$f$ageNow = as.factor(NOCA.ddl$f$ageNow)
+        NOCA.ddl$Phi$ageNow = as.factor(NOCA.ddl$Phi$ageNow)
+        NOCA.ddl$p$ageNow = as.factor(NOCA.ddl$p$ageNow)
+    }
+#
+#
+#
+#
+
+
+
+
+################################################################################
+################################################################################
+# SMD: Save the modified DDL
+################################################################################
+################################################################################
+
+    #detach(NOCA.ddl$p)
+    #load('NOCA.ddl_21_Feb_2019_19_40')
+    #NOCA.ddl$Phi$age.now <- 0
+    #sendmail("<erictobinull@gmail.com>","<erictobinull@gmail.com>","DDL Generation Complete","DDL has been created with initial age class, sex, and malaria as grouping variables.",control=list(smtpServer="ASPMX.L.GOOGLE.COM")) 
+
+    #browser()
+    cat('Saving Modified DDL\n')
+    #sendmail("<erictobinull@gmail.com>","<erictobinull@gmail.com>","MSM Model Begins Run","MSM Model has begun running. Check notes for 26Feb2019 on model specs. This is NOCA_MSM_Source_Trial2_LoadDDL.R",control=list(smtpServer="ASPMX.L.GOOGLE.COM")) 
+    timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
+    timestart = as.character(timestart)
+    NameForFile =paste0('NOCA.ddl_modified_',timestart)
+    NameForFile2 =paste0('NOCA.proc_modified_',timestart)
+
+    save(NOCA.ddl, file= NameForFile)
+    save(NOCA.proc, file = NameForFile2)
+
+################################################################################
+################################################################################
+# SMD:  Build the models and run Mark
+################################################################################
+################################################################################
+    initial.analysis=function() 
+    {
       
-  }
-  else if (NOCA.ddl$Phi$ageNow[i] == "A"){
-  }
-}
-#detach(NOCA.ddl$Phi)
-#attach(NOCA.ddl$p)
-for (i in 1:nrow(NOCA.ddl$p)){
-  if (NOCA.ddl$p$ageNow[i] == "Y"){
-    #horty <- occ.cohort[i]
-    
-    occFirst = NOCA.ddl$p$occ.cohort[i]
-    occThis  = NOCA.ddl$p$occ[i]
-    
-    yearFirst = as.numeric( cap.int$smdYear[ cap.int$occIndex == occFirst ] )
-    yearThis  = as.numeric( cap.int$smdYear[ cap.int$occIndex == occThis  ] )
-    if ( yearFirst == yearThis ) {
-      NULL; #Do nothing, this case is OK.   
-    } else if ( yearFirst < yearThis ) {
-      NOCA.ddl$p$ageNow[i] = 'A'
-    } else {
-      cat('WARNING: Something bad has happend. \n')
+      ###################  
+      #List of p models
+      p.dot                       =list(formula=~1)     
+      p.Sex                       =list(formula=~Sex)   
+      #p.season                    =list(formula=~season)
+      #p.ageNow                    =list(formula=~ageNow)
+      #p.year                      =list(formula=~year)  
+      #p.Malaria                   =list(formula=~Malaria)
+      #p.Sex.season                =list(formula=~Sex+season)
+      #p.ageNow.year               =list(formula=~ageNow+year)
+      
+      #p interactions
+      #p.Sex_season 				  =list(formula=~Sex*season)
+      #p.ageNow_year 			  =list(formula=~ageNow*year)
+      
+      ###################   
+      #List of S models
+      Phi.dot                       =list(formula=~1)
+      Phi.Sex                       =list(formula=~Sex)
+      #Phi.season                    =list(formula=~season)
+      #Phi.ageNow                    =list(formula=~ageNow)
+      #Phi.year                      =list(formula=~year)
+      Phi.MeanWing                  =list(formula=~MeanWing)
+      #Phi.stratum                   =list(formula=~-1+stratum)
+      #Phi.Malaria                   =list(formula=~Malaria)
+      #Phi.Sex.Season                =list(formula=~Sex+season)
+      #Phi.Season.year               =list(formula=~season+year)
+      #Phi.Malaria.Sex               =list(formula=~Malaria+Sex)
+      #Phi.Malaria.MeanWing          =list(formula=~Malaria+MeanWing)
+      #Phi.Malaria.season            =list(formula=~Malaria+season)
+      ###################   
+      #S interactions  
+      #Phi.Sex_Season                =list(formula=~Sex*season)
+      #Phi.Season_year               =list(formula=~season*year)
+      #S.Malaria_Sex               =list(formula=~Malaria*Sex)
+      #S.Malaria_MeanWing          =list(formula=~Malaria*MeanWing)
+      #S.Malaria_season            =list(formula=~Malaria*season)
+      ###################   
+      #List of Psi models  
+      #Psi.s                       =list(formula=~-1+stratum:tostratum, link="logit")
+      f.dot                        =list(formula=~1)
+      f.Sex                        =list(formula=~Sex)
+
+      #use create.model.list to construct the  models and store in object named woodrat.cml
+      NOCA.cml=create.model.list("Pradrec")
+
+      #use mark.wrapper with model list NOCA.CML and the processed data and design data to fit each of the models in MARK
+      model.list=mark.wrapper(NOCA.cml,data=NOCA.proc,ddl=NOCA.ddl,output=F, external = T, threads = 2)        
+      #results=mark.wrapper(NOCA.cml,data=NOCA.proc,ddl=NOCA.ddl,adjust=T,invisible=F)
+
+      #return the list of model results as the value of the fnction
+      return(model.list)
+      return(NOCA.cml)
     }
-    
-    
-  }
-  else if (NOCA.ddl$p$ageNow[i] == "A"){
-  }
-}
 
-for (i in 1:nrow(NOCA.ddl$f)){
-  if (NOCA.ddl$f$ageNow[i] == "Y"){
-    #horty <- occ.cohort[i]
-    
-    occFirst = NOCA.ddl$f$occ.cohort[i]
-    occThis  = NOCA.ddl$f$occ[i]
-    
-    yearFirst = as.numeric( cap.int$smdYear[ cap.int$occIndex == occFirst ] )
-    yearThis  = as.numeric( cap.int$smdYear[ cap.int$occIndex == occThis  ] )
-    if ( yearFirst == yearThis ) {
-      NULL; #Do nothing, this case is OK.   
-    } else if ( yearFirst < yearThis ) {
-      NOCA.ddl$f$ageNow[i] = 'A'
-    } else {
-      cat('WARNING: Something bad has happend. \n')
-    }
-    
-    
-  }
-  else if (NOCA.ddl$f$ageNow[i] == "A"){
-  }
-}
+    cat('Running Analysis\n')
+    # I don't know that this works for this formulation. I'm having a problem accessing individual models
+    # I may have to do this a different way. See below
+    # I think we have to generate a list of the model names, every iteration of Phi.var_p.var_f.var, then give to collect.models.
+    initial.analysis()
+    NOCA.results = collect.models()
 
-NOCA.ddl$f$ageNow = as.factor(NOCA.ddl$f$ageNow)
-NOCA.ddl$Phi$ageNow = as.factor(NOCA.ddl$Phi$ageNow)
-NOCA.ddl$p$ageNow = as.factor(NOCA.ddl$p$ageNow)
-}
-#detach(NOCA.ddl$p)
-#load('NOCA.ddl_21_Feb_2019_19_40')
-#NOCA.ddl$Phi$age.now <- 0
-#sendmail("<erictobinull@gmail.com>","<erictobinull@gmail.com>","DDL Generation Complete","DDL has been created with initial age class, sex, and malaria as grouping variables.",control=list(smtpServer="ASPMX.L.GOOGLE.COM")) 
+################################################################################
+################################################################################
+# SMD: Back up the final results. 
+# SMD:
+################################################################################
+################################################################################
 
-#browser()
-cat('Saving Modified DDL\n')
-#sendmail("<erictobinull@gmail.com>","<erictobinull@gmail.com>","MSM Model Begins Run","MSM Model has begun running. Check notes for 26Feb2019 on model specs. This is NOCA_MSM_Source_Trial2_LoadDDL.R",control=list(smtpServer="ASPMX.L.GOOGLE.COM")) 
-timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
-timestart = as.character(timestart)
-NameForFile =paste0('NOCA.ddl_modified_',timestart)
-NameForFile2 =paste0('NOCA.proc_modified_',timestart)
+    timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
+    timestart = as.character(timestart)
+    NameForFile3 =paste0('NOCA.results_PradelTrial_',timestart)
+    cat('Results saved in', NameForFile3, '\n')
+    save(NOCA.results,file=NameForFile3)
 
-save(NOCA.ddl, file= NameForFile)
-save(NOCA.proc, file = NameForFile2)
-
-initial.analysis=function(){
-  
-  ###################  
-  #List of p models
-  p.dot                       =list(formula=~1)     
-  p.Sex                       =list(formula=~Sex)   
-  #p.season                    =list(formula=~season)
-  #p.ageNow                    =list(formula=~ageNow)
-  #p.year                      =list(formula=~year)  
-  #p.Malaria                   =list(formula=~Malaria)
-  #p.Sex.season                =list(formula=~Sex+season)
-  #p.ageNow.year               =list(formula=~ageNow+year)
-  
-  #p interactions
-  #p.Sex_season 				  =list(formula=~Sex*season)
- #p.ageNow_year 			  =list(formula=~ageNow*year)
-  
-  ###################   
-  #List of S models
-  Phi.dot                       =list(formula=~1)
-  Phi.Sex                       =list(formula=~Sex)
-  #Phi.season                    =list(formula=~season)
-  #Phi.ageNow                    =list(formula=~ageNow)
-  #Phi.year                      =list(formula=~year)
-  Phi.MeanWing                  =list(formula=~MeanWing)
-  #Phi.stratum                   =list(formula=~-1+stratum)
-  #Phi.Malaria                   =list(formula=~Malaria)
-  #Phi.Sex.Season                =list(formula=~Sex+season)
-  #Phi.Season.year               =list(formula=~season+year)
-  #Phi.Malaria.Sex               =list(formula=~Malaria+Sex)
-  #Phi.Malaria.MeanWing          =list(formula=~Malaria+MeanWing)
-  #Phi.Malaria.season            =list(formula=~Malaria+season)
-  ###################   
-  #S interactions  
-  #Phi.Sex_Season                =list(formula=~Sex*season)
-  #Phi.Season_year               =list(formula=~season*year)
-  #S.Malaria_Sex               =list(formula=~Malaria*Sex)
-  #S.Malaria_MeanWing          =list(formula=~Malaria*MeanWing)
-  #S.Malaria_season            =list(formula=~Malaria*season)
-  ###################   
-  #List of Psi models  
-  #Psi.s                       =list(formula=~-1+stratum:tostratum, link="logit")
-  f.dot                        =list(formula=~1)
-  f.Sex                        =list(formula=~Sex)
-  #use create.model.list to construct the  models and store in object named woodrat.cml
-  NOCA.cml=create.model.list("Pradrec")
-  #use mark.wrapper with model list NOCA.CML and the processed data and design data to fit each of the models in MARK
-  model.list=mark.wrapper(NOCA.cml,data=NOCA.proc,ddl=NOCA.ddl,output=F, external = T, threads = 2)        
-  #results=mark.wrapper(NOCA.cml,data=NOCA.proc,ddl=NOCA.ddl,adjust=T,invisible=F)
-  #return the list of model results as the value of the fnction
-  return(model.list)
-  return(NOCA.cml)
-}
-cat('Running Analysis\n')
-#browser()
-#NOCA.results=initial.analysis()
-#I don't know that this works for this formulation. I'm having a problem accessing individual models
-#I may have to do this a different way. See below
-#I think we have to generate a list of the model names, every iteration of Phi.var_p.var_f.var, then give to collect.models.
-initial.analysis()
-NOCA.results = collect.models()
-
-
-timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
-timestart = as.character(timestart)
-NameForFile3 =paste0('NOCA.results_PradelTrial_',timestart)
-cat('Results saved in', NameForFile3, '\n')
-save(NOCA.results,file=NameForFile3)
-
-#sendmail("<erictobinull@gmail.com>","<erictobinull@gmail.com>","MSM Complete","MSM Model run with 2 CPUs, psi.logit link, and .ddl loading is complete.",control=list(smtpServer="ASPMX.L.GOOGLE.COM"))
+    #sendmail("<erictobinull@gmail.com>","<erictobinull@gmail.com>","MSM Complete","MSM Model run with 2 CPUs, psi.logit link, and .ddl loading is complete.",control=list(smtpServer="ASPMX.L.GOOGLE.COM"))
