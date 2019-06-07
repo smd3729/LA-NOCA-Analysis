@@ -1,51 +1,51 @@
 ################################################################################
-# NOCA_TSM_Source.R: 
-#
-# This program runs a TSM model on the data. 
-# To do this, we need to take a couple of steps.
-#   0) Get the R environment ready to go
-#
-#   1) Load the data
-#
-#   2) Clean up the banding data at a global level.
-#      There are a few things that need to be addressed 
-#      at the level of the entire database. So we do those first.
-#      These tasks include:
-#            1) Renaming a few columns to make the code simpler
-#            2) Making sure the date column has the correct type.
-#            3) Fix some broken dates.
-#            4) Create a list of capture dates and intervals. 
-#
-#   3) Trim the data down to just the records we want. 
-#      This involves limiting the data by species, station and record. 
-#      
-#   4) Next we need to clean up the data at a species level. 
-#      This involves fixing some details regarding age, sex, fat, etc ...
-#      This step also includes rebinning some of the data into
-#      new classes that are more meaningful for this analysis. 
-#      These steps include:
-#            1) Setting ages to either "Adult", "Juvenile" or "Unknown"
-#            2) Removing birds with only unknown ages. 
-#            3) Fixing sex and removing birds with only unknown ages. 
-#
-#   5) Next, we need to reformat the data into a format that 
-#      can be used in the mark recapture analysis. This means
-#      creating a capture history (100101011010...) and defining
-#      the covariates for each bird (age, sex, size, etc ...)
-#
-#
 ################################################################################
-
-# Select whose version of the code you want to run.
-Version = 'SMD'
-#Version = 'EJT'
+## NOCA_TSM_Source.R: 
+##
+##
+## This program runs a TSM model on the data. 
+## To do this, we need to take a couple of steps.
+##   0) Get the R environment ready to go
+##
+##   1) Load the data
+##
+##   2) Clean up the banding data at a global level.
+##      There are a few things that need to be addressed 
+##      at the level of the entire database. So we do those first.
+##      These tasks include:
+##            1) Renaming a few columns to make the code simpler
+##            2) Making sure the date column has the correct type.
+##            3) Fix some broken dates.
+##            4) Create a list of capture dates and intervals. 
+##
+##   3) Trim the data down to just the records we want. 
+##      This involves limiting the data by species, station and record. 
+##      
+##   4) Next we need to clean up the data at a species level. 
+##      This involves fixing some details regarding age, sex, fat, etc ...
+##      This step also includes rebinning some of the data into
+##      new classes that are more meaningful for this analysis. 
+##      These steps include:
+##            1) Setting ages to either "Adult", "Juvenile" or "Unknown"
+##            2) Removing birds with only unknown ages. 
+##            3) Fixing sex and removing birds with only unknown ages. 
+##
+##   5) Next, we need to reformat the data into a format that 
+##      can be used in the mark recapture analysis. This means
+##      creating a capture history (100101011010...) and defining
+##      the covariates for each bird (age, sex, size, etc ...)
+##
+##
+################################################################################
+################################################################################
 
 ################################################################################
 ################################################################################
 ## Step 0: Get the environment set up and ready to run
-##
+## check
 ################################################################################
 ################################################################################
+
     # Step 0.1: Clean up the name space so we are starting from scratch.
         rm(list=ls())
         assign("last.warning", NULL, envir = baseenv())
@@ -54,35 +54,33 @@ Version = 'SMD'
     # I'm ont sure all of these are currently
     # being used in this version, but they have 
     # been used in the past. 
-        library(RMark)
-        library(ggplot2)   
-        library(msm)
         library(data.table)
+        library(dplyr)
+        library(ggplot2)   
+        #library(lsmeans)
+        library(magrittr)
+        library(msm)
+        #library(multcomp)
+        library(plyr)
+        library(rlist)
+        library(RMark)
+        #library(sendmailR)
         library(stringi)
         library(stringr)
-        library(rlist)
-        library(plyr)
-        #library(multcomp)
-        #library(lsmeans)
-        library(dplyr)
-        #library(sendmailR)
 
     # Step 0.3: Define user configurable parameters
-    filenameBirbs = 'labo database malaria.csv'
-
-    filenameTemplate  = 'NOCA_TSM_Source_<field>.<type>'
-    filenameDLL       = filenameTemplate %>% str_replace('<field>','_DLL') %>% str_replace('type','dll')
-    filenameProc      = filenameTemplate %>% str_replace('<field>','_Proc') %>% str_replace('type','proc')
+        filenameBirbs = 'labo database malaria.csv'
     
-
+        filenameTemplate  = 'NOCA_TSM_Source_<field>.<type>'
+        filenameDLL       = filenameTemplate %>% str_replace('<field>','_DLL') %>% str_replace('<type>','dll')
+        filenameProc      = filenameTemplate %>% str_replace('<field>','_Proc') %>% str_replace('<type>','proc')
 
 ################################################################################
 ################################################################################
 ## Step 1: Load in the data
-##
+## check
 ################################################################################
 ################################################################################
-    # Set the name of the combined labo/malaria database
 
     # Print a message to the screen
     cat('NOCA_TSM_Source.R: Msg: Step 1: Reading CSV data\n')
@@ -120,18 +118,33 @@ Version = 'SMD'
 ##    3) Fix age anomolies for birds. Make sure ages are chronological and fix a few other things. 
 ##
 ##    4) 
-##
+## check
 ################################################################################
 ################################################################################
 
     # Print out a status message so we know where we are inthe script. 
     cat('NOCA_TSM_Source.R: Msg: Step 2: Clean the data\n')
+    
+    ################################################################################
+    # Step 2.0: Make a copy of the database for comparison.
+    #
+    #           Part of what we need to do here is remove damaged
+    #           records. We'll make a copy of the database before anything
+    #           is removed, and then we can compare the cleaned database
+    #           and the original one to see what changed. 
+    #
+    #           There are other, more efficient ways to do this
+    #           but this way works and makes other aspects of the coding easier. 
+    # check
+    ################################################################################
+        birbsOriginal = birbs
 
     ################################################################################
     # Step 2.1: Rename columns
-    #
+    # check
     ################################################################################
-    cat('NOCA_TSM_Source.R: Msg: Step 2.1: Renaming columns\n')
+        cat('NOCA_TSM_Source.R: Msg: Step 2.1: Renaming columns\n')
+
         # Change the column name "BandingStation" to just "Station"
         setnames(birbs, "BandingStation", "Station")
 
@@ -139,79 +152,174 @@ Version = 'SMD'
         setnames(birbs, "BandingDate", "Date")
 
     ################################################################################
-    # Step 2.2: Deal with the Date information in the database. 
+    # Step 2.2: Find, report and remove the number of same day recaptures.  
+    #           There are eight Codes used for birds: N, R, S, C, L, D, "", and U
+    #           N = new
+    #           R = recap
+    #           S = same day recap
+    #           C = band change
+    #           L = lost
+    #           D = destroyed
+    #           "" = ?
+    #           U = unknown
+    #             
+    #           For now I'm just going to get rid of the same day recap records. 
+    # check
+    ################################################################################
+    cat('NOCA_TSM_Source.R: Msg: Step 2.2: Removing same day recaptures\n')
+    birbs = subset( birbs, Code != "S" )
+
+    cat('NOCA_TSM_Source.R: Msg: Step 2.2: Removing lost bands\n')
+    birbs = subset( birbs, Code != "L" )
+
+
+    ################################################################################
+    # Step 2.3: Deal with the Date information in the database. 
     #           This includes casting the dates to the correct class
     #           and creating some auxiliary date information like season.
     #           We will also fix some broken date information.
-    #           
+    # check 
     ################################################################################
-    cat('NOCA_TSM_Source.R: Msg: Step 2.2: Processing date information\n')
+        cat('NOCA_TSM_Source.R: Msg: Step 2.3: Processing date information\n')
 
-        ############################################################
-        # Step 2.2.1: Create a Date column and give it the correct type. 
+        # Step 2.3.1: Casting the date column to the correct type
         #
-        ############################################################
-        cat('NOCA_TSM_Source.R: Msg: Step 2.2: Creating date column\n')
-            birbs$Date = paste(birbs$Year, birbs$Month, birbs$Day, sep = "-")
-            birbs$Date = as.Date(birbs$Date, "%Y-%m-%d")
+        cat('NOCA_TSM_Source.R: Msg: Step 2.3: Casting date column\n')
+        birbs$Date    = as.Date(birbs$Date, '%Y-%m-%d')
 
-        ############################################################
-        # Step 2.2.2: Fix some odd date information.
+        # Step 2.3.2: Remove records with NA dates.
+        #             There are 15 records that have a date of NA. 
+        #             These need to be removed. 
+        #
+        # check
+        cat('NOCA_TSM_Source.R: Msg: Step 2.3: Removing records with NA dates\n')
+        birbs = subset(birbs, !is.na(Date) )
+
+        # Step 2.3.3: Fix some odd date information.
         #             We need to fix the dates before we narrow the data base because
         #             date is one criteria used to narrow the data base, so we need to 
         #             make sure they are correct before going any further. 
         #
-        #             The database records two instances of back-to-back banding dates. 
-        #             One pair of dates includes April 16 and 17, 2011.
-        #             The other pair is February 27 and 28, 2014. 
-        #             I suspect that some of this is misrecorded data. But maybe not.
-        #             At any rate, for simplicity, we'll merge each pair into a single date.
+        #             The database records several instances of "back-to-back" banding
+        #             dates. Some of these are clearly clerical errors. 
+        #             On June 5, 2019 I got the following results for Bluebonnet:
         #
-        ############################################################
-        cat('NOCA_TSM_Source.R: Msg: Step 2.2: Fixing some back-to-back banding dates\n')
+        #              First      Second     numFirst numSecond numBoth
+        #              <date>     <date>        <int>     <int>   <int>
+        #            1 2011-04-16 2011-04-17       48        52       7
+        #            2 2014-02-27 2014-02-28       39         2       1
+        #            3 2014-05-25 2014-05-26       21         4       0
+        #            4 2014-07-06 2014-07-07        2        40       0
+        #            5 2015-01-10 2015-01-11        1        27       0
+        #            6 2015-04-11 2015-04-12       75        38       0
+        #            7 2015-06-07 2015-06-08        8         9       0
+        #            8 2015-06-08 2015-06-09        9         3       0
+        #            9 2015-06-21 2015-06-22       32        15       0
+        #           10 2015-07-12 2015-07-13        4        15       1
+        #           11 2016-06-09 2016-06-10        8         2       0
+        #           12 2017-03-26 2017-03-27       25         4       0
+        #           13 2017-03-27 2017-03-28        4         3       0
+        #           14 2017-04-09 2017-04-10       16         2       0
+        #           15 2017-04-23 2017-04-24       21         4       0
+        #           16 2017-05-07 2017-05-08       11         6       0
+        #           17 2017-06-04 2017-06-05        9         6       0
+        #
+        #             Note that same day capatures (Code == 'S') have already 
+        #             been removed from the database.
+        #             
+        #             I'm going to change the date information for these
+        #             back-to-back banding dates by re-dating records recorded
+        #             on the second day to have the first day's date. 
+        #             This will throw off the estimate of p and Phi a little
+        #             but given the number of records involved, that we are
+        #             only shifting the dates by one day and that some of these
+        #             double dates are certainly clerical errors, I don't think
+        #             this is going to be a big deal. This approach will also
+        #             will also reduce the number of capture occations and make
+        #             the parameter search process a little more robust. 
+        #             
+        #             I will also note that we will be using Mark to estimate
+        #             monthly values for p and Phi. By having a one-day intervals
+        #             in the data, we will be asking Mark to raise p and Phi to 
+        #             1/30 (a single day measured in months). Since p and Phi
+        #             are already probabilities (bewteen 0 and 1), this will result
+        #             in values very close to 1 if the monthly estimate for p or Phi
+        #             are even moderaly large. This might cause numerical problems 
+        #             for the search algorithm. These problems might be addressed 
+        #             by using a different link function, but removing single day
+        #             intervals is another solution. 
+        #             
+        #             Again, I don't think this is going to mess with the results
+        #             much. So, I'm going to do it. We can always take this out
+        #             and see what happens. 
+        #
+        # check
+        cat('NOCA_TSM_Source.R: Msg: Step 2.3.3: Checking back-to-back banding dates\n')
 
-            # This pair is a Monday and a Tuesday. 
-            birbs$Date[birbs$Date == as.Date("2011-04-17")] = as.Date("2011-04-16")
+        # Check for other back-to-back banding dates.
+        # Need to do this per station.
+        stationList = list( c('HOME','BAMB'), 'PISP')
+        for ( st in stationList ) {
+            temp = subset(birbs, Station%in%st)
 
-            # This pair is a Thrusday and a Friday
-            birbs$Date[birbs$Date == as.Date("2014-02-28")] = as.Date("2014-02-27")
+            # Make a dataframe to hold the unique capture dates and 
+            # the length of time to the next capture date (delta). The last
+            # date will have a delta of zero.
+            dateCheck = tibble( Date  = temp$Date %>% unique() %>% sort(),
+                                delta = c(Date[2:length(Date)] - Date[2:length(Date) - 1 ], 0) )
+            index = which ( dateCheck$delta == 1 ) 
+            if ( length(index) ) {
+                cat('NOCA_TSM_Source.R: Warning : There are ',length(index),' back-to-back banding dates for'); print(st)
+                cat('NOCA_TSM_Source.R: Warning : The pairs and number of records are:\n')
+                reportDF = tibble( First = dateCheck$Date[index],
+                                   Second = dateCheck$Date[index+1] )
+                reportDF$numFirst  = apply(reportDF, 1, function(row) { sum( birbs$Date == row['First']   ) } )
+                reportDF$numSecond = apply(reportDF, 1, function(row) { sum( birbs$Date == row['Second']  ) } )
+                reportDF$numBoth   = apply(reportDF, 1, function(row) { 
+                    b1 = birbs$BandNumber[ birbs$Date == row['First'] ] %>% unique()
+                    b2 = birbs$BandNumber[ birbs$Date == row['Second'] ] %>% unique()  
+                    which ( b1 %in% b2 ) %>% length() %>% return() 
+                    } )
+                print(reportDF)
 
-            # Check for other back-to-back banding dates.
-            # Need to do this per station.
-            stationList = list( c('HOME','BAMB'), 'PISP')
-            for ( st in stationList ) {
-                cat('NOCA_TSM_Source.R:: Msg: Checking back-to-back banding dates for station(s):'); print(st)
-                temp = subset(birbs, Station%in%st)
+                cat('NOCA_TSM_Source.R: Msg : Merging back-to-back records onto a single date\n')
+                cat('NOCA_TSM_Source.R: Msg : See comments for how this is done.\n')
+                cat('NOCA_TSM_Source.R: Msg : Note that this may create up to ',sum(reportDF$numBoth),' duplicate records \n')
+                cat('NOCA_TSM_Source.R: Msg : These duplicate records may be removed later\n')
+                for ( i in 1:nrow(reportDF) ) {
+                    d1 = reportDF$First[i]
+                    d2 = reportDF$Second[i]
+                    if ( reportDF$numFirst[i] >= reportDF$numSecond[i] ) {
+                        birbs$Date[ birbs$Date == d2 ] = d1
+                    } else {
+                        birbs$Date[ birbs$Date == d1 ] = d2
+                    }
+                }
 
-                dateCheck = tibble( Date = temp$Date %>% unique() %>% sort(),
-                                    delta = c(0, Date[2:length(Date)] - Date[2:length(Date) - 1 ]) )
-                if ( sum(dateCheck$delta == 1) > 1 ) {
-                    cat('NOCA_TSM_Source.R: Warning : There are ',sum(dateCheck$delta == 1),' back-to-back banding dates.\n')
-                    print( subset(dateCheck, delta == 1) )
-                } else {
-                    cat('NOCA_TSM_Source.R: Msg: There are ',sum(dateCheck$delta == 1),' back-to-back banding dates.\n')
-                } 
-            }
-            # Clean up the namespace
-            remove(list = c('dateCheck'))
+            } else {
+                cat('NOCA_TSM_Source.R: Msg : There are no back-to-back banding dates.\n')
+            } 
 
-        ############################################################
-        # Step 2.2.3: Fix any date errors in the database. 
+        }
+
+        # Step 2.3.4: Remove double records. 
         #             This section finds captures that got double recorded in the LABO database
-        #             and removes them. These are not same-day recaptures, they are errors in the LABO database. 
-        #
-        ############################################################
-        cat('NOCA_TSM_Source.R: Msg: Step 2.2.3: Removing double records\n')
+        #             and removes them. These are not same-day recaptures. Those were
+        #             removed in an earlier step. 
+        # check
+            cat('NOCA_TSM_Source.R: Msg: Step 2.2.3: Removing double records\n')
    
-            # Step 1: Create an auxiliar data.frame that has one row for each band number and the list of capture dates
+            # Step 1: Create an auxiliary data.frame that has one row 
+            # for each band number and the list of capture dates
             # associated with that band number. 
-            dateDouble = aggregate(Date~BandNumber, working, paste, collapse=",")
+            dateDouble = aggregate(Date~BandNumber, birbs, paste, collapse=",")
 
             # Step 2: Cycle over the unique band numbers here. For each
             # band number, check the list of dates. If there are replicates 
             # remove the redundent records. There are more efficient ways 
             # to do this in R, but this works and is sensible. 
-            for (i in 1:nrow(dateDouble)){
+            count = list(duplicates = 0, unique = 0 )
+            for (   i in 1:nrow(dateDouble)   ) {
 
                 # Get the band number
                 bandNum        = dateDouble$BandNumber[i] 
@@ -226,21 +334,41 @@ Version = 'SMD'
                 # Find the dates with that occur more than once. 
                 dupCapDates    = names(capDatesTable)[ capDatesTable > 1 ]
                 
-                # Cycle over the duplicate band/date records and remove the duplicates. 
-                for ( date in dupCapDates ) {
-                    # index will hold the record number of all the duplicated records
-                    index = which( working$BandNumber == bandNum & working$Date == date ) 
-                    # Get all the duplicates except the first record
-                    index = index[2:length(index)]
-                    # Drop all of the duplicate records
-                    working = working[ -index,  ]
+                if ( length(dupCapDates) ) {
+                    #cat('NOCA_TSM_Source.R: Warning: Found a set of duplicate record. Details as follows:\n')
+
+                    # Cycle over the duplicate band/date records and remove the duplicates. 
+                    for ( date in dupCapDates ) {
+                        # index will hold the record number of all the duplicated records
+                        index = which( birbs$BandNumber == bandNum & birbs$Date == date ) 
+
+                        reportDF     = birbs[index, c('BandNumber', 'Date', 'Code', 'CaptureTime', 'SpeciesCode', 'Station')]
+                        capTimeTable = table(reportDF$CaptureTime)
+
+                        if ( length(capTimeTable) == 1 ) {
+                            #cat('NOCA_TSM_Source.R: Warning: Records appear to be duplicates\n')
+                            count$duplicates = count$duplicates + 1
+                        } else {
+                            #cat('NOCA_TSM_Source.R: Warning: Records appear to be unique (based on CaptureTime)\n')
+                            #print(reportDF)
+                            count$unique = count$unique + 1
+                        }
+
+                        # Get all the duplicates except the first record
+                        index = index[2:length(index)]
+
+                        # Drop all of the duplicate records
+                        birbs = birbs[ -index,  ]
+                    }
                 }
             }
+            cat('NOCA_TSM_Source.R: Warning: Number of records that appear to be duplicates: ', count$duplicate, '\n')
+            cat('NOCA_TSM_Source.R: Warning: Number of records that appear to be unique    : ', count$unique, '\n')
 
             # Step 3: Now double check that everything is OK. If there are still errors
             # at this point, they will require human intervension to fix. 
             # Print out a list of problem records.
-            dateDouble            = aggregate(Date~BandNumber, working, paste, collapse=",")
+            dateDouble            = aggregate(Date~BandNumber, birbs, paste, collapse=",")
             dateDouble$hasProblem = 0
 
             for (i in 1:nrow(dateDouble)){
@@ -256,43 +384,35 @@ Version = 'SMD'
 
             problemBirds = subset(dateDouble, hasProblem == 1 )
 
-            if ( file.exists('NOCA_TSM_Source_01_date_double.csv') ) { file.remove('NOCA_TSM_Source_01_date_double.csv', showWarnings = F) }
             if ( nrow(problemBirds) != 0  ) {
-              print("MSM_Tobin_Original.R: Msg: There are birds with double dates\n")
-              problemRecord = subset(working, BandNumber %in% problemBirds$BandNumber)
-              write.csv(problemRecord, 'NOCA_TSM_Source_01_date_double.csv', row.names=F, quote=F)
+              cat("MSM_Tobin_Original.R: Error: There are still birds with double records after the fix\n")
             }
 
             # Step 4: Clean up the namespace. 
             remove(list = c('dateDouble','problemBirds'))
 
-
-        ############################################################
-        # Step 2.2.4: Add the season definitions. 
+        # Step 2.2.5: Add the season definitions. 
         #             The breeding season will be defined as dates between 
         #             April 1st and August 7th, inclusive. 
-        #
-        ############################################################
-        cat('NOCA_TSM_Source.R: Msg: Step 2.2.4: Adding seasons\n')
+        # check
+            cat('NOCA_TSM_Source.R: Msg: Step 2.2.4: Adding seasons\n')
             index               = (4 <= birbs$Month) & ( birbs$Month < 8 | ( birbs$Month == 8 & birbs$Day <= 7 ) )
             birbs$Season        = 'Nonbreeding'
             birbs$Season[index] = 'Breeding'
 
-        ################################################################################
-        # Step 2.2.5: Find report and remove the number of same day recaptures.  
-        #
-        ################################################################################
-        cat('NOCA_TSM_Source.R: Msg: Step 2.2.5: Removing same day recaptures\n')
-            index = birbs$Code == 'S'
-            cat('NOCA_TSM_Source.R: Msg: Number of same day recaptures = ', sum(index), '\n')
+            # Make sure this worked correctly. 
+            if ( F ) {
+                check       = birbs[ , c('Date','Season') ] %>% unique()
+                check$year  = year(check$Date)
 
-            # Remove same day recapture records since they don't really contribute to 
-            # survivorship estimates. While we could in principle use this data, I don't 
-            # think it is a good idea for numerical reasons. 
-            cat('NOCA_TSM_Source.R: Msg: Removing same day recaps\n')
-            birbs <- birbs[which(birbs$Code != "S"),]
+                for (   y in (check$year %>% unique() %>% sort())   ) {
+                    cat('NOCA_TSM_Source.R: Msg: Year = ', y ,'\n')
+                    cat('NOCA_TSM_Source.R: Msg: Breeding season dates are:\n')
+                    check$Date[ check$year == y & check$Season == 'Breeding'] %>% sort() %>% print()
+                
+                }
+            }
 
-        
     ################################################################################
     # Step 2.3: Create capture date dataframe
     #
@@ -325,59 +445,51 @@ Version = 'SMD'
     #           However, some of these details, like season, are redunant with 
     #           features from step 2.2.4. It would be worthwhile checking whether or
     #           not step 2.2.4 is needed. 
-    # 
+    # check
     ################################################################################
     cat('NOCA_TSM_Source.R: Msg: Step 2.3: Creating capture date dataframe\n')
+
     cat('NOCA_TSM_Source.R: Msg: Step 2.3: NOTE: This needs to be synchronized with the reduction of the\n')
     cat('NOCA_TSM_Source.R: Msg: Step 2.3: NOTE: banding data in the next section to make sure the same \n')
     cat('NOCA_TSM_Source.R: Msg: Step 2.3: NOTE: station and date range is selected. \n')
     temp      = subset( birbs, Station %in% c('HOME','BAMB') & Date > as.Date('2010-03-30') ) 
-    capDateDF = tibble( Date = temp$Date %>% unique() %>% sort(), delta = c(0, Date[2:length(date)] - Date[2:length(date)-1] ) )
+    capDateDF = tibble( Date = temp$Date %>% unique() %>% sort(), 
+                        delta = c(0, Date[2:length(Date)] - Date[2:length(Date)-1] ),
+                        month = month(Date),
+                        day   = mday(Date) )
 
     # Mesure the intervals in months. 
     capDateDF$monthlyinterval = capDateDF$delta/30
 
-    index                   = (4 <= birbs$Month) & ( (birbs$Month < 8 ) | ( birbs$Month == 8 & birbs$Day <= 7 ) ) 
+    index                   = (4 <= capDateDF$month) & ( (capDateDF$month < 8 ) | ( capDateDF$month == 8 & capDateDF$day<= 7 ) ) 
     capDateDF$season        = 'Nonbreeding'
     capDateDF$season[index] = 'Breeding'
     capDateDF$yearReal      = year(capDateDF$Date)
     capDateDF$year          = capDateDF %>% with( { yearReal - min(yearReal) + 1 })
     capDateDF$occasion      = cumsum(capDateDF$monthlyinterval)
 
+    # Build the smdYear which counts year starting at April 1. 
+    firstYear         = capDateDF$Date %>% year() %>% min()
+    lastYear          = capDateDF$Date %>% year() %>% max()
+    numYear           = lastYear - firstYear + 1
+    breedYearDefn     = seq( paste(firstYear,'-04-01',sep='') %>% as.Date() , length=numYear, by='year') 
+    capDateDF$smdYear = findInterval(capDateDF$Date, breedYearDefn)
+
+    # copy everything over to the name cap.int, which is the
+    # name used by Eric's original code. We'll refactor this 
+    # eventually. 
     cap.int = capDateDF
 
 ################################################################################
 ################################################################################
 ## Step 3: Strip the data down to just the species, station and dates 
 ##         that we want
-##
+## check
 ################################################################################
 ################################################################################
 
     cat('NOCA_TSM_Source.R: Msg: Step 3: Subsetting by species, station and date\n')
     working = subset( birbs, SpeciesCode == 'NOCA' & Station %in% c('HOME','BAMB') & Date > as.Date('2010-03-30') ) 
-
-    # Deal with sex in one place. See below.
-    ###########################################################
-    # Do a sanity check on the database and find any birds that
-    # have sex codes other that M, F, or U.
-    ###########################################################
-
-    # Make a subset of the data with birds with invalid sex codes
-    # unknownSexBirds = subset( birbs, !(Sex%in%c('M','F','U')) )
-
-    # If the invalid sex code data set has one or more entires, print out an 
-    # error message. 
-    #if ( nrow(unknownSexBirds) ) {
-    #    # The error message
-    #    cat('NOCA_TSM_Source.R: Error: There are birds with sex codes other than M/F/U\n')
-    #    # Record the problem birds for subsequent follow up.
-    #    # Check to see if the problemSexBirds.csv file exists. If it does, remove it.
-    #    if ( file.exists('problemSexBirds.csv') ) { file.remove('problemSexBirds.csv') }
-    #    # Write the problemSexBirds.csv data. 
-    #    write.csv(unknownSexBirds, 'problemSexBirds.csv', row.names=F)
-    #}
-
 
     ################################################################################
     # Step 3.1: Check net 99
@@ -388,9 +500,9 @@ Version = 'SMD'
     #           will have a significant impact on the results and if we need
     #           to modify the model structure to account for them. 
     #           Refer to project log v.2 on 21feb2019 to see if this needs changing
-    #
+    # check
     ################################################################################
-    cat('NOCA_TSM_Source.R: Msg: Step 3: Reporting Net 99 records\n')
+        cat('NOCA_TSM_Source.R: Msg: Step 3: Reporting Net 99 records\n')
         cat('NOCA_TSM_Source.R: Msg: Number of NOCA captures in net 99 = ', sum(working$Net == 99), '\n' )
         cat('NOCA_TSM_Source.R: Msg: Number of unique NOCAs in net 99  = ', subset(working, Net == 99)$BandNumber %>% unique() %>% length(), '\n' )
 
@@ -411,22 +523,20 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
     # There are some birds with ambiguous sex records. 
     # We need to fix these. 
     #
+    # check
     #################################################
     cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing sex\n')
 
-        #################################################
         # Step 1: Fix blank sex records
         #         An inspection of the sex records for birds reveals that there are 
         #         four values for sex: "M", "F", "U" and "".
         #         We are going to reclassify the "" records as "U".
-        #
-        #################################################
+        # check
         working$Sex[ working$Sex == ''] = 'U'
 
-        #################################################
         # Step 2: Find all birds with ambiguous sex records and fix them.
         #
-        #################################################
+        # check
 
             # Step 2.1:
             #
@@ -451,9 +561,6 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
 
                 # Cycle over the band numbers with ambiguous records. 
                 for ( bn in sexDF$BandNumber ) {
-                    # Get the index for the records associated with this bird 
-                    index = which( working$BandNumber == bn)
-
                     # Find the number of records for this bird
                     numRecords = nrow( subset(working, BandNumber == bn ) )
 
@@ -466,25 +573,33 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
                     # Find the number of times the bird was classified as unknown
                     numAsNeuter = nrow( subset(working, BandNumber == bn & Sex == 'U') )
                     
+                    # If the bird was always classed as U, there is nothing we can do.
+                    # In the else part, we know that the bird was assigned at least one
+                    # of male or female. So we will select the sex based on which 
+                    # catagory had the most hits
                     if ( numAsNeuter == numRecords ) {
-                        # If the bird was always classed as U, there is nothing we can do.
-                        # In the else part, we know that the bird was assigned at least one
-                        # of male or female. So we will select the sex based on which 
-                        # catagory had the most hits
                         cat('NOCA_TSM_Source.R: Msg: Found a bird with only sex == U, band number = ',bn,'\n')
 
                     } else if ( numAsMale > numAsFemale ) {
-                        working$Sex[index] = 'M'
+                        working$Sex[ working$BandNumber == bn ] = 'M'
 
                     } else if ( numAsMale < numAsFemale ) {
-                        working$Sex[index] = 'F'
+                        working$Sex[ working$BandNumber == bn ] = 'F'
 
                     } else {
                         # In this case numAsMale == numAsFemale, so sex = U
                         # We might be able to solve this by checking CP, BP, weight and wing length 
                         # For now, we'll just report the number of such birds.
-                        working$Sex[index] = 'U'
-                        cat('NOCA_TSM_Source.R: Warning: Found a bird with #M == #F, band number = ',bn,'\n')
+                        cat('NOCA_TSM_Source.R: Warning: Found a bird with #M == #F\n')
+                        cat('NOCA_TSM_Source.R: Warning: Using last non-U sex code as sex\n')
+                        reportDF = working[ working$BandNumber == bn, c('BandNumber','Date','Sex','CP','BP')]
+                        print(reportDF)
+
+                        theBird    = subset(working, BandNumber == bn & Sex != 'U' )
+                        theBird    = theBird[ order(theBird$Date), ]
+                        theBirdSex = theBird$Sex[ nrow(theBird) ] 
+
+                        working$Sex[ working$BandNumber == bn ] = theBirdSex 
                     }
                 }
         } else {
@@ -535,13 +650,10 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
     # However, this approach may not be appropriate for all species. So we'll print a 
     # warning to the user. 
     #
+    # check
     ################################################################################
-    cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing age\n')
 
-        # Get the unqiue age classes. 
-        ages             <- unique( working$Age )
-
-        cat('NOCA_TSM_Source.R: Msg: NOCA age classes, before sanitation and transformation:',ages,'\n')
+        cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing age\n')
 
         cat('NOCA_TSM_Source.R: WARNING: #########################################################\n') 
         cat('NOCA_TSM_Source.R: WARNING: Reclassifying age classes, make sure this is doing what you want\n') 
@@ -558,470 +670,237 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
             stop('NOCA_TSM_Source.R: Error: Hmmm, the first reaging step did not work\n')
         }
 
-        # I think the goal of Eric's original code is to remove birds that only have
-        # unknown ages. I think my replacement code does the same thing with fewer steps.
-        if ( Version == 'SMD' ) {
-            # Step 1: Create an auxiliar data.frame that contains the list of unique ages given to each bird
-            ageDF = aggregate(Age~BandNumber, working, function(age) { age %>% unlist() %>% unique() %>% sort() %>% paste(collapse=',')} )
+        # Step 1: Create an auxiliar data.frame that contains the list of unique ages given to each bird
+        #
+        # check
+        ageDF = aggregate(Age~BandNumber, working, function(age) { age %>% unlist() %>% unique() %>% sort() %>% paste(collapse=',')} )
 
-            # Step 2: Remove any birds that where only ever given an age class of Unknown.
-            index = ageDF$Age == 'Unknown'
-            cat('NOCA_TSM_Source.R: Msg: Removing ',sum(index),' birds that where only ever classed as Age == Unknown (U, \"\", F, K, X)\n')
-            working = subset(working, BandNumber %in% ageDF$BandNumber[index] )
+        # Step 2: Remove any birds that where only ever given an age class of Unknown.
+        #
+        # check
+        index = ageDF$Age == 'Unknown'
+        cat('NOCA_TSM_Source.R: Msg: Removing ',sum(index),' birds that where only ever classed as Age == Unknown (U, \"\", F, K, X)\n')
+        working = subset(working, !(BandNumber %in% ageDF$BandNumber[index]) )
 
-            # Step 3: Make sure ages occure in the correct order. 
-            
-            # Just work on birds that have more than one age class
-            ageDF$numAge = apply(ageDF, 1, function(row) { row[2] %>% strsplit(split=',') %>% unlist() %>% length() })
-            ageDF = subset(ageDF, numAge > 1 ) 
-
-            # Cycle over birds that have more than one age class 
-            # and make sure those ages occurred in the correct order. 
-            for ( bn in ageDF$BandNumber ) {
-                bird = subset(working, BandNumber == bn )
-                bird = bird[ order(bird$Date), ]
-            }
-
-        } else {
-            # Get the NOCA records with an age of U
-            uagebirds        <- subset( NOCA, Age == 'U')
-
-            # Get the band numbers for birds with an age of U
-            uagebirds        <- unique( uagebirds$BandNumber )
-
-            # Get all the records for birds with an age of U
-            # Note that a bird might have several records and so several age values
-            # This gets all the records of the birds that have at least one age == U record
-            uagebirds        <- subset( NOCA, BandNumber %in% uagebirds)
-
-            # Create an auxiliary data.frame that has the range of dates
-            # for each band/age combination
-            uagebirds        <- aggregate( Date~BandNumber+Age, uagebirds, paste, collapse=',' )
-
-            # Not sure why this function is defined here. 
-            '%!in%'          <- function(x,y) {!('%in%'(x,y))}
-
-            # Find the band numbers for birds that have at least one non-U age
-            knownunknownages <- unique( uagebirds$BandNumber[ which(uagebirds$Age != 'U') ] )
-
-            # Find the band numbers for birds that have at least one U age
-            unknownages      <- unique( uagebirds$BandNumber[ which(uagebirds$Age == 'U') ] )
-
-            # Get the band numbers for birds with at least one unknown age that have no known ages.
-            # knownunknownages is a list of bands that have at least one known age
-            # unknownages is a lsit of bands that have at least one unknown age
-            # the %in% command creates a true/false list the same length as unknownages
-            # that is true when a band number from unknownages is in the knownunknownages
-            # The final == "FALSE" inverse the true/false list. Could also be done with !. 
-            unknownages      <- unknownages[ which( unknownages     %in% knownunknownages == "FALSE" ) ]
-
-            # Finally, subset the NOCA data.frame so it only contains birds that only have
-            # unknown ages class designation. 
-            unknownages      <- NOCA[        which( NOCA$BandNumber %in% unknownages ), ]
-
-            # Create an auxiliar data.frame that gives the list of capture dates for each band number
-            # associated with birds that only have unknown age class designation. 
-            checkAge         <- aggregate( BandNumber~Date, unknownages, paste, collapse=',' )
-
-            # Get the unique band numbers for birds with only unknown age designation
-            unknownages      <- unique( unknownages$BandNumber)
-
-            # Find out how many records there are in the birbs data base. 
-            beforeAgeRemoval <- nrow( birbs)
-
-            # Subset birbs 
-            # I don't really get how this is supposed to work. There are really too many 
-            # steps here to make this understandable.
-            birbs            <- birbs[ which( birbs$BandNumber %!in% unknownages ), ]
-
-            # Find out how many records there are in the birbs data base for birds (NOCAs?) 
-            # that only have U age. 
-            afterAgeRemoval  <- nrow( birbs )
-
-            # Check what has happened as a result of removing birds with no known age. 
-            if( ( beforeAgeRemoval-afterAgeRemoval )!=length( unknownages ) ){
-              cat( 'MSM_Tobin_Original.R: Msg: Error in unknown age removals! More birds tossed or captured more than once.\n' )
-              browser( )
-            }else{
-              cat( 'MSM_Tobin_Original.R: Msg: Removed', length(unknownages), 'birds with unkown ages, captured only once.\n' )
-            }
-
-            # Clean up the name space
-            remove(list   = c('checkAge','uagebirds','unknownSexBirds','NOCA','problemBirds'))
-        }
-
+        # Clean up the name space.
+        remove(ageList, ageDF, index)
+       
     ################################################################################
     # Step 4.3: Initial Age Assignment.
     #            In this section we are creating a new column to store the initial
     #            age of the bird. This will allow us to modify the PIM for the 
     #            model to compute a different p and phi for junenile birds vs adult birds.
     #            
-    #
-    #
+    # check
     ################################################################################
-    cat('NOCA_TSM_Source.R: Msg: Step 4: Creating initial age\n')
+        cat('NOCA_TSM_Source.R: Msg: Step 4: Creating initial age\n')
 
-        if ( Version == 'SMD' ) {
-            # Step SMD-2,3 and 4 are equivalent to steps EJT-2,3 and 4, but
-            # the result is achived is a slightly different way. In the SMD code
-            # the sequence of events is:
-            #          1) Make sure the records are ordered by date
-            #          2) Create auxiliary dataframe collating the list of ages by band number
-            #          3) Modify the auxiliary dataframe by adding a column of initial ages.
-            #          4) Push initial age into working
-            #
-            # In the EJT code the sequence of events is:
-            #          1) Create auxiliary dataframe collating the list of ages by band number
-            #          2) Make space to store initial ages in the banding data (EJT:birbs vs SMD:working).
-            #          3) Push the list of ages into the banding data
-            #          4) Modify the column with the list of ages by replacing each entry with just the initial age.
-            #
-            # Step EJT-5 has no equivalent in the SMD code because I have already 
-            # collapased the ages down to just "Adult", "Juvenile" and "Unknown" 
-            # in Step 2.9.
+        # The sequence of events is:
+        #          1) Make sure the records are ordered by date
+        #          2) Create an auxiliary dataframe collating the list of ages by band number
+        #          3) Modify the auxiliary dataframe by adding a column of initial ages.
+        #          4) Push initial age into the working dataframe
+        #
 
-            # Step SMD-1: Make sure the database is sorted by date.
-            #             To make sure we actually get the first age, we 
-            #             need to sort the data frame by date.
-            #         
-            working = working[ order(working$Date), ]
+        # Step 1: Make sure the database is sorted by date.
+        #             To make sure we actually get the first age, we 
+        #             need to sort the data frame by date.
+        #         
+        # check 
+        working = working[ order(working$Date), ]
 
-            # Step SMD-2: Next, create an auxiliary dataframe that 
-            #             lists all ages associated with each band number
-            #             Equivelent to Step EJT-1 below
-            ageDF         = aggregate(Age ~ BandNumber, working, paste, collapse=',')
+        # Step 2: Next, create an auxiliary dataframe that 
+        #             lists all ages associated with each band number
+        #             Equivelent to Step EJT-1 below
+        #
+        # check
+        ageDF         = aggregate(Age ~ BandNumber, working, paste, collapse=',')
 
-            # Step SMD-3: Next, get the initial age for each bird
-            ageDF$initAge = apply(ageDF, 1, function(row) {row['Age'] %>% strsplit(split=',')[1] } )
-
-            # Step SMD-4: Add the initial age to each record in "working"
-            working$initAge = NA 
-            for ( i in 1:nrow(ageDF) ) {
-                band    = ageDF$BandNumber[i]
-                initAge = ageDF$initAge[i]
-                working$initAge[ working$BandNumber == band] = initAge
-            }
-
-            # Step SMD-5: Remove birds with an initial age of "Unknown". 
-            #             Handling these birds in the analysis isn't imposible, but
-            #             it is complicated and at the moment we'll just live without them
-            #             to make things simpler. 
-            #             
-            #             This is equivalent to Step EJT-6.
-            
-            # Step SMD-5.1: Get a list of all bands that have an unknown age record
-            bandNumList = working$BandNumber[ working$initAge == 'Unknown' ] %>% unique()
-
-            # Step SMD-5.2: Report how many bands and records will be removed. 
-            cat('NOCA_TSM_Source.R: Msg: Removing birds/records with unknown ages\n')
-            cat('NOCA_TSM_Source.R: Msg: Number of birds being removed   = ',length(bandNumList),'\n')
-            cat('NOCA_TSM_Source.R: Msg: Number of records being removed = ',sum( working$BandNumber%in%bandNumList ) ,'\n')
-
-            # Step SMD-5.3: If the list is not empty, go ahead and do something
-            working = subset(working, !( BandNumber%in%bandNumList ) )
-
-        } else {
-
-            # Step EJT-1: Create an auxiliar data frame that contains a list of all ages 
-            # assocaited with each band number.
-            intAge        <- aggregate(Age~BandNumber, birbs, paste, collapse=',')
-
-            # Step EJT-2: Create space to hold the initial ages
-            # Checked by hand, but should build a script to determine that none of the birds get
-            # a younger age class after getting and older age class. That is, make sure age is only
-            # increasing. 
-            # We also need to put some for loops in here to convert the initial ages into Y/A
-            # for now, I'm going to give everyone their initial age classes in birbs and go from there
-            birbs$IntAge <- 0
-
-            # Step EJT-3: Give each record the full list of ages assigned to the associated bird
-            for (band in intAge$BandNumber){
-                birbs$IntAge[birbs$BandNumber == band] = intAge$Ages[intAge$BandNumber == band]
-            }
-
-            # Step EJT-4: Now reset IntAge for each record so that it contains the initial age of the bird.
-            for (i in 1:nrow(birbs)){
-              indivAge <- birbs$IntAge[i]
-              agesplit <- strsplit(indivAge,",",fixed = TRUE)[[1]]
-              birbs$IntAge[i] <- agesplit[1]
-            }
-
-            # Step EJT-5: Recode the ages down to just adult, juvenile or unknown.
-            #
-            # SMD: It is note clear that this code really does what you want.
-            # SMD: Birds can have one of 13 different age codes: "A" "O" "S" "U" "T" "Y" "L" ""  "H" "J" "F" "K" "X"
-            # SMD: Here you only check for H, J, L, S, A, and U. So the classes O, T, Y, "", F, K and X are all ommited. 
-            # SMD: This may not be a problem for the NOCA's but that isn't they way you built this script. 
-            #
-            # agelessbirds is a list of band numbers and species codes
-            # for birds that have an age of 'U'. The data structures looks something like:
-            #
-            # [[1]]
-            # [1] "1234" "NOCA"
-            # 
-            # [[2]]
-            # [1] "2345" "CARW"
-            # 
-            # [[3]]
-            # [1] "5678" "NOCA"
-            #
-            agelessbirds <- as.list(NULL)
-            for (b in 1:nrow(birbs)){
-                if (birbs$IntAge[b] == "H" || birbs$IntAge[b]=="J" || birbs$IntAge[b]=="L" ){
-                    # If the initial age for a bird's record is H, J or L, then reset it to L
-                    # H = hatch year
-                    # J = Juvenile
-                    # L = ???
-                    birbs$IntAge[b] = "Y"
-                } else if (birbs$IntAge[b] == "S"|| birbs$IntAge[b] == "A"){
-                    # If the initial age for a bird's record is S (second year) or A (after hatch year)
-                    # then set it to "A" (adult).
-                    birbs$IntAge[b] = "A"
-                } else if (birbs$IntAge[b] == "U"){
-                    # Keep a list of birds that had an age of U as the initial age. 
-                    agelessbirds <- list.append(agelessbirds, c(birbs$BandNumber[b], birbs$SpeciesCode[b]) )
-                }
-            }
-
-            # Step EJT-6: Remove NOCAs with bad first ages. 
-            #             What is a bad first age? Birds that have an age of "U"
-            #             
-            cat("Removing NOCAs with bad first ages. Come back to this after conference.")
-
-            # Step EJT-6.1: Make a dataframe out of agelessbirds
-            #             The resulting dataframe looks something like:
-            #
-            #     V1   V2
-            # 1 1234 NOCA
-            # 2 2345 CARW
-            # 2 5678 NOCA
-            agey <- transpose( as.data.frame(agelessbirds))
-
-            # Step EJT-6.2: After this step the dataframe agey looks like:
-            #
-            #     V1   V2
-            # 1 1234 NOCA
-            # 2 5678 NOCA
-            agey <- agey[which(agey$V2=="NOCA"),]
-
-            # Step EJT-6.3: Now get a subset of the entire database that 
-            #             just has birds with an age of "U" 
-            AgelessNOCA = subset(birbs, BandNumber%in%agey$V1)
-
-            # Step EJT-6.4: Get just the band numbers for thise birds.
-            AgelessNOCA <- unique(AgelessNOCA$BandNumber)
-
-            # Step EJT-6.5: Get all the birds not in this list.
-            #              %!in% is defined above.
-            birbs       = subset(birbs, BandNumber%!in%AgelessNOCA)
-
-            # Step EJT-6.6: Find out how many birds are being excluded. 
-            ageless = length(AgelessNOCA)
-            #okay, we have 93 observations of NOCAs with a bad first age class, but there are only 20 individuals....
-            #should fix this later, but we'll just toss em for now. This comes out as a result of converting age classes. I should take thes and backtrack cycle codes when i have more time. I also got birds tossed correctly, in that all obs are removed.
-
-            #Redefine initial age. We're going to need to refine this loop with the date thingy (before spring are still considered young)
-            cat("There are",ageless,"NOCAs with a bad initial age class")
+        # Step 3: Make sure the ages occure in the correct order 'Juvenile' -> 'Adult'  
+        #
+        # check
+        ageDF$isOrdered  = apply(ageDF, 1, function(row) { 
+                            temp = row['Age'] %>% strsplit(split=',') %>% unlist()
+                            temp = temp[ temp != 'Unknown' ]
+                            temp = match( temp, c('Juvenile', 'Adult') )
+                            if ( temp %>% is.na() %>% sum() ) { return(F) }
+                            return( ( (temp != sort(temp)) %>% sum()) == 0  )
+                            } )
+        if ( sum(!ageDF$isOrdered) ) {
+            cat('NOCA_TSM_Source.R: Warning: Ages do not appear to occure in the correct order\n')
+            cat('NOCA_TSM_Source.R: Warning: Problem records are:\n')
+            reportDF = subset(working, BandNumber %in% ageDF$BandNumber[ ageDF$isOrdered == F], c('BandNumber','Date','Age','Sex'))
+            print(reportDF[ order(reportDF$BandNumber, reportDF$Date), ])
         }
 
+        # Step 4: Next, get the initial age for each bird
+        #
+        # check 
+        ageDF$initAge = apply(ageDF, 1, function(row) { (row['Age'] %>% strsplit(split=',') %>% unlist() )[1] } )
+
+        # Step 5: Add the initial age to each record in "working"
+        #
+        # check 
+        working$initAge = NA 
+        for ( i in 1:nrow(ageDF) ) {
+            band    = ageDF$BandNumber[i]
+            initAge = ageDF$initAge[i]
+            working$initAge[ working$BandNumber == band] = initAge
+        }
+
+        # Step 6: Reclassify birds with unknown initial age as adults.
+        #         
+        #         An examination of the records with unknown initial age
+        #         indicatest that these birds were only ever classifed
+        #         as either unknown or adult. So, I'm just going to classify
+        #         them all as adults. 
+        #         
+        # check 
+        
+        # Step 6.1: Report how many bands and records will be changed.
+        # 
+        # check
+        cat('NOCA_TSM_Source.R: Msg: Chaning records with unknown initial age to \"Adult\"\n')
+        cat('NOCA_TSM_Source.R: Msg: Number of birds involved   = ',sum( ageDF$initAge == 'Unknown' ) ,'\n')
+        cat('NOCA_TSM_Source.R: Msg: Number of records involved = ',sum( working$initAge == 'Unknown'),'\n')
+        cat('NOCA_TSM_Source.R: Msg: Affected records are:\n')
+        print(ageDF[ ageDF$initAge == 'Unknown', ])
+
+        # Step 6.2: Change their initial age status
+        # 
+        # check
+        working$initAge[ working$initAge == 'Unknown' ] = 'Adult'
+
+        # clean up the namespace
+        remove(ageDF) 
+    
     ################################################################################
     # Step 4.4: Prep the fat data
     #
+    # The original banding data provides the following
+    # fat classes:
+    # N = None
+    # T = Trace
+    # L = Light
+    # H = Half
+    # F = Full
+    # B = Bulging
+    # G = Greatly bulging
+    # V = Very excessive 
+    # "" = ?
+    # ! = OMG, how is that bird able to fly
+    # 
+    # I don't think we can really use all these classes
+    # since I'm not sure we have enough birds with values
+    # in each class to be statisticaly significant. 
+    #
+    # For this analysis we will use just three classes: None, Low and High 
+    # with the following mapping:
+    #
+    # None = N
+    # Low  = T, L
+    # High = H, F, B, G, V, !
+    #
+    # We'll have to check how many records have no entry.
+    #
+    # check
     ################################################################################
-    cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing fat\n')
-        if ( Version == 'SMD' )  {
-            # Step 1: Reclass the fat data.
-            #
-            # The original banding data provides the following
-            # fat classes:
-            # N = None
-            # T = Trace
-            # L = Light
-            # H = Half
-            # F = Full
-            # B = Bulging
-            # G = Greatly bulging
-            # V = Very excessive 
-            # "" = ?
-            # ! = OMG, how is that bird able to fly
-            # 
-            # I don't think we can really use all these classes
-            # since I'm not sure we have enough birds with values
-            # in each class to be statisticaly significant. 
-            #
-            # For this analysis we will use just two classes: High and low fat
-            # with the following mapping:
-            #
-            # Low fat = N, T, L
-            # High fat = H, F, B, G, V, !
-            #
-            # We'll have to check how many records have no entry.
-            working$Fat[ working$Fat %in% c('N', 'T', 'L') ]                = 'Low'
-            working$Fat[ working$Fat %in% c('H', 'F', 'B', 'G', 'V', '!') ] = 'High'
-            working$Fat[ working$Fat %in% c('') ]                           = 'Unknown'
+        cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing fat\n')
 
-            # Step 2: No we need to decide how to deal with records
-            #         where no fat data was recorded.
-            #         The first thing to do is to figure out how
-            #         many records and birds this affects. 
+        # Step 1: Reclass the fat data.
+        #
+        #
+        working$Fat[ working$Fat %in% c('N') ]                          = 'None'
+        working$Fat[ working$Fat %in% c('T', 'L') ]                     = 'Low'
+        working$Fat[ working$Fat %in% c('H', 'F', 'B', 'G', 'V', '!') ] = 'High'
+        working$Fat[ working$Fat %in% c('') ]                           = 'Unknown'
 
-            fatU     = subset(working, Fat == 'Unknown')
-            bandList = unique(fatU$BandNumber)
-            cat('NOCA_TSM_Source.R: Msg: Checking and removing birds/records without fat data\n')
-            cat('NOCA_TSM_Source.R: Msg: There are ',nrow(fatU),' birds with at least one fat value of \"U\"\n')
-            cat('NOCA_TSM_Source.R: Msg: There are ',length(bandList),' records with a fat value of \"U\"\n')
-
-            working = subset(working, Fat == 'Unknown')
-
-        } else {
-            # Reclassify empty fat entries as U
-            NOCA$Fat[NOCA$Fat== ""] = "U"
-
-            # Find records where fat == 'U'
-            nofatNOCAs <- NOCA[which(NOCA$Fat == 'U'),]
         
-            # Count the number of records where fat == 'U'
-            nofatobs   <- length(nofatNOCAs$BandNumber)
-    
-            # Get the band numbers for birds that have at least one fat record == 'U'
-            nofatnum <- unique(nofatNOCAs$BandNumber)
+        cat('NOCA_TSM_Source.R: Msg: Number of records in each fat class:\n')
+        print( table(working$Fat) )
 
-            # If there are birds that have multiple records, but have some unknown fat entries
-            # raise a warning to let the user deal with those. However, if a bird is only 
-            # captured once and has no fat data, then drop it from the analysis. 
-            if(nofatobs != length(nofatnum)){
-              cat('MSM_Tobin_Original.R: Msg: There are', nofatobs ,'NOCA observations from the population, but there are multiple captures of at least one. Investigate.\n')
-              browser()
-            } else{
-              cat('MSM_Tobin_Original.R: Msg: There are', length(nofatnum) ,'NOCA individuals caught only once with no fat observation. Removed from analysis.\n')
-            }
-            # Drop records where fat == 'U'. I don't really like this
-            # at it could cause problems. 
-            NOCA <- NOCA[which(NOCA$Fat != 'U'),]
+        # Step 2: Deal with records where fat == 'Unknown'
+        #         
+        #         An inspection of the records/birds where fat is either
+        #         unknown or high indicates that there are 41 records
+        #         with high fat values, which accounts for 37 birds.
+        #         To be honest, with such low numbers, compared to the total
+        #         data set (num NOCA records = 1699), I'm not sure fat is
+        #         really going to contribute much to  understanding 
+        #         variation in p and phi. We'll include it for now, 
+        #         but I don't think it will matter. 
+        #         
+        #         There are 18 records with unknown fat values, which 
+        #         accounts for 18 birds. Of these birds, two were only
+        #         captured once and two had high fat, low fat and unknown
+        #         fat values. I'm going to suggest we reclassify all unknown
+        #         fat values as "None". I don't want to drop birds with unknown
+        #         fat records because some of these birds have long capture
+        #         histories (once bird was captured 16 times, several others 
+        #         have at least 5 captures). This is valuable data. Given 
+        #         that I don't think fat really matters, I'm reticent to 
+        #         drop these records. 
+        #         
 
-            # Now reclass the fat data.
-            #we need to reduce our dimensionality, so we are making fat into two categories: High (B/F/H) and Low (L/T/N)
-            NOCA$Fat[NOCA$Fat=="B"] = "H"
-            NOCA$Fat[NOCA$Fat=="F"] = "H"
-            NOCA$Fat[NOCA$Fat=="T"] = "L"
-            NOCA$Fat[NOCA$Fat=="N"] = "L"
+        fatDF = aggregate(Fat ~ BandNumber, working, function(fat) { fat %>% unlist() %>% paste(collapse=',') } )
 
+        fatDF$numNone    = apply(fatDF, 1, function(row) {
+                                         temp = row['Fat'] %>% strsplit(split=',') %>% unlist()
+                                         (temp == 'None') %>% sum() %>% return() } )
+
+        fatDF$numLow    = apply(fatDF, 1, function(row) {
+                                         temp = row['Fat'] %>% strsplit(split=',') %>% unlist()
+                                         (temp == 'Low') %>% sum() %>% return() } )
+
+        fatDF$numHigh   = apply(fatDF, 1, function(row) {
+                                         temp = row['Fat'] %>% strsplit(split=',') %>% unlist()
+                                         (temp == 'High') %>% sum() %>% return() } )
+
+        fatDF$numUnknown = apply(fatDF, 1, function(row) {
+                                         temp = row['Fat'] %>% strsplit(split=',') %>% unlist()
+                                         (temp == 'Unknown') %>% sum() %>% return() } )
+
+        cat('NOCA_TSM_Source.R: Msg: Number of records where fat == \"Unknown\" = ',sum(working$Fat == 'Unknown'),'\n')
+        cat('NOCA_TSM_Source.R: Msg: Number of birds with \"Unknown\" fat       = ',nrow(fatDF[fatDF$numUnknown > 0, ] ),'\n')
+        cat('NOCA_TSM_Source.R: Msg: Details for \"Unknown\" fat birds:\n')
+        print( subset(fatDF, numUnknown > 0) )
+
+        cat('NOCA_TSM_Source.R: Msg: Chaning \"Unknown\" fat records to \"None\"\n')
+        cat('NOCA_TSM_Source.R: Msg: What we really need is a method for handling missing data\n')
+
+        working$Fat[ working$Fat == 'Unknown' ] = 'None'
+
+        # Clean up the namespace.
+        remove(fatDF)
 
     ################################################################################
     # Step 4.5: Prep the mean wing length data
     #
+    # check
     ################################################################################
-    cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing mean wing data\n')
+        cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing mean wing data\n')
+
         wingDF      = aggregate(RightWing ~ BandNumber, working, paste, collapse = ',')
+        wingDF$N    = apply(wingDF, 1, function(row) {row['RightWing'] %>% strsplit(split=',') %>% unlist() %>% as.numeric() %>% is.na() %>% not() %>% sum() } )
         wingDF$mean = apply(wingDF, 1, function(row) {row['RightWing'] %>% strsplit(split=',') %>% unlist() %>% as.numeric() %>% mean(na.rm=T) } )
-        noWingDF    = subset( wingDF, is.na(wingDF$mean) | wingDF$mean == 0 )
-        cat('NOCA_TSM_Source.R: Msg: Checking and removing birds with no wing data\n')
-        cat('NOCA_TSM_Source.R: Msg: There are ',nrow(noWingDF),' birds with no wing data\n')
-        working = subset(working, !( BandNumber%in%noWingDF$BandNumber) )
+        wingDF$sd   = apply(wingDF, 1, function(row) {row['RightWing'] %>% strsplit(split=',') %>% unlist() %>% as.numeric() %>% sd(na.rm=T) } )
 
-################################################################################
-# Left over code that doesn't really do anything anymore. 
-################################################################################
-
-    if ( F ) {
-        # SMD-TMP: 
-        # SMD-TMP: I think all this section does is create a blank capture history
-        # SMD-TMP: and classifies each capture collation into one of two "seasons":
-        # SMD-TMP: a breeding season and a non-breeding season.
-        # SMD-TMP: I'm going to do this somewhere else. We need to finish cleaning the data first. 
-        # SMD-TMP: 
-        # SMD-TMP: 
-
-        ################################################################################
-        # Step 3: Modify the banding data (EJT:birbs, SMD:working) by adding 
-        #         a column to contain the capture history of the bird.
-        #
-        ################################################################################
-        #Do this before subsetting by species. There are days you sample but don't capture your species
-
-        ####Create your date list, index, and CH
-        datelist       <- as.data.frame( unique(  birbs$Date  ) )
-        #get the unique dates. We've combined two dates thusfar
-        datelist       <- datelist[order(datelist$`unique(birbs$Date)`) , ] 
-        #port the dates into an ordered list. You can't do in a df, so overwrite it
-        datelist       <- as.data.frame(datelist)
-        #get the list of dates into a DF so you can play around with them
-        ################################
-        ###We have a problem here, it can't sort based on a df column, only list
-        #Solved that, read comments above. 
-        ################################
-        datelist$Index <- seq.int( nrow(  datelist  ) )
-        #create your index. This puts a counter by each date, telling you the order in sequence. 
-
-        datelist$CH    <- 0
-        #create blank capture history column. 
-
-        setnames(datelist, "datelist", "Date")
-        #rename to make it easier
-
-        birbs$CH       <- paste0(datelist$CH, collapse="")
-        #apply blank capture history to every bird
-        ##I think this is no longer used, we have a different way of doing things now to create the CH. 
-        ##Kept until confirmed unused. 23Jan2019
-    }
-    
-    # SMD: None of this needs to happen any more because we have already
-    # trimmed the data down to just the NOCAs above. 
-    if ( F ) {
-        ################################################################################
-        # Step 4: Subset to species 
-        #
-        ################################################################################
-
-        # SMD-TMP: This section strips the data down to NOCAs
-        # SMD-TMP: and tosses birds without bandnumbers. 
-        # SMD-TMP: 
-        ###
-        NOCA      <- birbs[which(birbs$SpeciesCode == "NOCA"),]
-        #Subset to NOCA. Keep original birbs
-        ###
-        nobandNOCA <- length(unique(NOCA$BandNumber))
-        NOCA       <- subset(NOCA, !is.na(NOCA$BandNumber))
-        nobandNOCA <- nobandNOCA - length(unique(NOCA$BandNumber))
-        #Remove missing band numbers. Lose 14.
-        #Problem: these missing band number birds are missing. Somewhere, we purged non-banded birds. Talk to Scott
-        cat('MSM_Tobin_Original.R: Msg: We do not have any birds missing bands. Removed', nobandNOCA,'NOCAs with no band number')
-        premoval  <- length( unique( NOCA$BandNumber ) ) 
-    }
-
-    # SMD: This is already done, so we can skip it.  
-    if ( F ) {
-        # Remove birds with sex == 'U'
-        NOCA      <- NOCA[which(NOCA$Sex != "U"),]
-        postmoval <- length( unique( NOCA$BandNumber ) )
-        cat('MSM_Tobin_Original.R: Msg: Removed U sex birds. This removes', (premoval-postmoval) ,'NOCA individuals from the population.\n')
-        #browser()
-    }
-    
-    # SMD-TMP: Strip out birds without fat data
-    # SMD-TMP: and reclassify fat data into high and low.
-    # SMD-TMP: I've moved this code somewhere else. 
-    # SMD-TMP: 
-    # SMD-TMP: 
-    # SMD-TMP: 
-    if ( F ) {
-        NOCA$Fat[NOCA$Fat== ""] = "U"
-        nofatNOCAs <- NOCA[which(NOCA$Fat == 'U'),]
-        nofatobs   <- length(nofatNOCAs$BandNumber)
-        nofatnum <- unique(nofatNOCAs$BandNumber)
-        if(nofatobs != length(nofatnum)){
-          cat('MSM_Tobin_Original.R: Msg: There are', nofatobs ,'NOCA observations from the population, but there are multiple captures of at least one. Investigate.\n')
-          browser()
-        } else{
-          cat('MSM_Tobin_Original.R: Msg: There are', length(nofatnum) ,'NOCA individuals caught only once with no fat observation. Removed from analysis.\n')
+        numNoMeanWing = wingDF %>% subset(N == 0) %>% nrow()
+        if ( numNoMeanWing ) {
+            cat('NOCA_TSM_Source.R: Error: Number of birds with no mean wing length (all data == NA): ',wingDF %>% subset(N == 0) %>% nrow(),'\n')
+            wingDF %>% subset(N == 0) %>% print()
+            stop()
+        } else {
+            cat('NOCA_TSM_Source.R: Msg: All birds have a mean wing length\n')
         }
-        NOCA <- NOCA[which(NOCA$Fat != 'U'),]
-        #we need to reduce our dimensionality, so we are making fat into two categories: High (B/F/H) and Low (L/T/N)
-        NOCA$Fat[NOCA$Fat=="B"] = "H"
-        NOCA$Fat[NOCA$Fat=="F"] = "H"
-        NOCA$Fat[NOCA$Fat=="T"] = "L"
-        NOCA$Fat[NOCA$Fat=="N"] = "L"
-    }
+
+        working$meanWing = 0
+        for ( bn in wingDF$BandNumber ) {
+            working$meanWing[working$BandNumber == bn] = wingDF$mean[ wingDF$BandNumber == bn]
+        }
+
+        # clean up the namespace
+        remove(fatDF)
 
 ################################################################################
 ################################################################################
@@ -1176,7 +1055,6 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
 
                 if (length(unique(nowingNOCA$BandNumber)) != RemovedNoWing){
                     cat('MSM_Tobin_Original.R: Msg: Removed birds without winglength. This removes', RemovedNoWing ,'NOCA observations from the population, but there are',length(unique(nowingNOCA$BandNumber)) ,'NOCA individuals. This means some are captured more than once without a winglength. Investigate.\n')
-                    browser()
                 }else {
                     cat('MSM_Tobin_Original.R: Msg: Removed birds without winglength captured only once. This removes',length(unique(nowingNOCA$BandNumber)) ,'NOCA individuals.\n')
                 }
@@ -1348,7 +1226,6 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
 
         #combine into mark dataframe, remove everyone who didn't have a mean wing
         ##loses 40 individuals
-        #browser()
         setnames(Marky, "BandNumber", "id")
         setnames(Marky, "CJS", "freq")
         setnames(Marky, "CH", 'ch')
@@ -1364,6 +1241,7 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
 # SMD: 
 ################################################################################
 ################################################################################
+
     if ( F ) {
         ################################################################################
         # Step 8: Make capture intervals (not equal, so needs to be set)
@@ -1417,6 +1295,7 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
         #
     }
 
+
 ################################################################################
 ################################################################################
 # SMD: In this section Eric is making the process data 
@@ -1424,7 +1303,7 @@ cat('NOCA_TSM_Source.R: Msg: Step 4: Fixing anomolies\n')
 # SMD:
 ################################################################################
 ################################################################################
-    if ( Version = 'SMD' ) {
+    if ( Version == 'SMD' ) {
         NOCA.proc = process.data( markData, 
                                   model = 'Pradrec', groups = c('Sex', 'season', 'IntAge'),
                                   time.intervals = capDateDF$delta[2:nrow(capDateDF)] )
@@ -1720,7 +1599,6 @@ if ( F ) {
 #
 #
     cat('We cannot add ageNow to DDL. This section is toggled for more exploration with Scott (07April2019)\n')
-    browser()
     if ( F ) {
         NOCA.ddl$f$ageNow = NOCA.ddl$f$IntAge
         NOCA.ddl$Phi$ageNow = NOCA.ddl$Phi$IntAge
@@ -1816,7 +1694,6 @@ if ( F ) {
     #NOCA.ddl$Phi$age.now <- 0
     #sendmail("<erictobinull@gmail.com>","<erictobinull@gmail.com>","DDL Generation Complete","DDL has been created with initial age class, sex, and malaria as grouping variables.",control=list(smtpServer="ASPMX.L.GOOGLE.COM")) 
 
-    #browser()
     cat('Saving Modified DDL\n')
     #sendmail("<erictobinull@gmail.com>","<erictobinull@gmail.com>","MSM Model Begins Run","MSM Model has begun running. Check notes for 26Feb2019 on model specs. This is NOCA_MSM_Source_Trial2_LoadDDL.R",control=list(smtpServer="ASPMX.L.GOOGLE.COM")) 
     timestart = format(Sys.time(), "%d_%b_%Y_%H_%M")
